@@ -69,9 +69,17 @@ export async function POST(req: Request) {
       const r = await procesarBoton(String(toque.data ?? ''));
       await responderBoton(toque.id, r?.aviso);
       if (r?.linea && toque.message) {
-        // Reemplaza la pregunta por la respuesta, dejando el resto del mensaje igual.
-        const original = String(toque.message.text ?? '').replace(/\n?¿(De dónde salió|A dónde entró)\?\s*$/, '');
-        await editarMensaje(chat, toque.message.message_id, `${esc(original)}\n${r.linea}`);
+        // Quita la pregunta respondida, agrega la respuesta y deja las demás preguntas (con sus botones).
+        const esRespondida = (l: string) => (r.pregunta === 'cuenta' ? /^¿(De dónde salió|A dónde entró)\?/ : /^¿Era \$/).test(l);
+        const lineas = String(toque.message.text ?? '').split('\n').filter((l) => !esRespondida(l));
+        const cuerpo = lineas.filter((l) => !l.startsWith('¿')).map(esc);
+        const pendientes = lineas.filter((l) => l.startsWith('¿')).map(esc);
+        const prefijo = r.pregunta === 'cuenta' ? 'c:' : 'm:';
+        const filas = (toque.message.reply_markup?.inline_keyboard ?? []) as { text: string; callback_data: string }[][];
+        const quedan = filas
+          .map((f) => f.filter((b) => !b.callback_data.startsWith(prefijo)).map((b) => ({ texto: b.text, dato: b.callback_data })))
+          .filter((f) => f.length);
+        await editarMensaje(chat, toque.message.message_id, [...cuerpo, r.linea, ...pendientes].join('\n'), quedan);
       }
     } catch (e) {
       console.error('Error con el botón', e);

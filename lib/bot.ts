@@ -153,6 +153,10 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
       return textoHormiga();
   }
   if (cmd.startsWith('/')) return 'No conozco ese comando. Escribe /ayuda.';
+  // "cancela", "bórralo", "me equivoqué", "deshacer": borra el último movimiento
+  if (/^(cancela(r|lo)?|b[oó]rra(lo|r)?|borra eso|eso no|me equivoqu[eé]|deshacer|deshaz|anula(r|lo)?|elimina(r|lo)?)(?![\p{L}\d])/iu.test(texto) && !extraerMonto(texto)) {
+    return borrarUltimo();
+  }
   // "ya pagué la nu" / "ya pagué la cuota de la av villas": solo marca la cuota (o el fijo) como pagada, sin mover saldos
   if (/^ya\s+(la\s+|lo\s+)?pagu[eé](?![\p{L}\d])/iu.test(texto)) {
     return yaPague(texto.replace(/^ya\s+(la\s+|lo\s+)?pagu[eé]\s*/iu, ''));
@@ -224,6 +228,17 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
     }
   }
 
+  // "700" sin unidad: ¿$700 o $700.000? Sentido común: monedas (cuidar la moto, propina…) o que no alcance la plata → pesos.
+  let preguntaMonto: { pesos: number; mil: number } | null = null;
+  if (dato.ambiguo) {
+    const { pesos: p, mil } = dato.ambiguo;
+    const deMonedas = /\b(cuid\w*|propina|parque\w*|bolsa|tinto|chicle|dulce|moneda\w*|limosna|ba[ñn]o|fotocopia\w*|minuto\w*|peaje)\b/i.test(textoOriginal);
+    const plata = cuenta ? cuenta.c.saldo : todas.length ? todas.reduce((s, c) => s + c.saldo, 0) : null;
+    const noAlcanza = dato.tipo === 'gasto' && plata != null && mil > Math.max(plata, 0);
+    dato = { ...dato, monto: deMonedas || noAlcanza ? p : mil };
+    preguntaMonto = dato.ambiguo ?? null;
+  }
+
   const cuentaId = cuenta?.c.id ?? null;
   const saldoNuevo = cuenta ? cuenta.c.saldo + (dato.tipo === 'ingreso' ? dato.monto : -dato.monto) : 0;
   const lineaCuenta = cuenta
@@ -243,7 +258,9 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
       preguntar ? '' : `Libre: <b>${pesos(r.disponible)}</b>`,
       !preguntar && r.disponible > 0 ? `Hoy puedes gastar hasta <b>${pesos(r.presupuestoHoy)}</b> (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '',
     ].filter(Boolean).join('\n');
-    return preguntar ? { texto: `${texto}\n¿A dónde entró?`, botones: botonesCuentas('i', idIngreso, todas) } : texto;
+    const botones = [...(preguntaMonto ? botonesMonto('i', idIngreso, preguntaMonto) : []), ...(preguntar ? botonesCuentas('i', idIngreso, todas) : [])];
+    const preguntas = [preguntaMonto ? textoPreguntaMonto(preguntaMonto) : '', preguntar ? '¿A dónde entró?' : ''].filter(Boolean);
+    return botones.length ? { texto: [texto, ...preguntas].join('\n'), botones } : texto;
   }
 
   const categoria = dato.categoria ?? 'Otros';
@@ -275,8 +292,20 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
     );
   }
   if (categoria === 'Otros') lineas.push('¿Categoría equivocada? Corrígela con /cat Comida (o la que sea).');
-  if (preguntar) return { texto: `${lineas.join('\n')}\n¿De dónde salió?`, botones: botonesCuentas('g', idGasto, todas) };
+  const botones = [...(preguntaMonto ? botonesMonto('g', idGasto, preguntaMonto) : []), ...(preguntar ? botonesCuentas('g', idGasto, todas) : [])];
+  const preguntas = [preguntaMonto ? textoPreguntaMonto(preguntaMonto) : '', preguntar ? '¿De dónde salió?' : ''].filter(Boolean);
+  if (botones.length) return { texto: [...lineas, ...preguntas].join('\n'), botones };
   return lineas.join('\n');
+}
+
+const textoPreguntaMonto = (a: { pesos: number; mil: number }) => `¿Era ${pesos(a.pesos)} o ${pesos(a.mil)}?`;
+
+/** Los dos montos posibles; el dato viaja como "m:g:<id>:<monto>". */
+function botonesMonto(tipo: 'g' | 'i', id: number, a: { pesos: number; mil: number }): Boton[][] {
+  return [[
+    { texto: `Era ${pesos(a.pesos)}`, dato: `m:${tipo}:${id}:${a.pesos}` },
+    { texto: `Era ${pesos(a.mil)}`, dato: `m:${tipo}:${id}:${a.mil}` },
+  ]];
 }
 
 /** Un botón por cuenta (de a 3 por fila). El dato viaja como "c:g:<id del gasto>:<id de la cuenta>". */
@@ -291,17 +320,25 @@ function botonesCuentas(tipo: 'g' | 'i', id: number, cuentas: db.Cuenta[]): Boto
  * Cuando tocas un botón de cuenta: le pone esa cuenta al gasto/ingreso y ajusta el saldo.
  * Devuelve la línea para reemplazar la pregunta en el mensaje, o null si el botón no es de cuentas.
  */
-export async function procesarBoton(dato: string): Promise<{ linea: string; aviso: string } | null> {
+export async function procesarBoton(dato: string): Promise<{ linea: string; aviso: string; pregunta: 'cuenta' | 'monto' } | null> {
+  await asegurarEsquema();
+  const monto = dato.match(/^m:(g|i):(\d+):(\d+)$/);
+  if (monto) {
+    const tipo = monto[1] === 'g' ? 'gasto' : 'ingreso';
+    const r = await db.corregirMonto(tipo, Number(monto[2]), Number(monto[3]));
+    if (!r) return { linea: '', aviso: 'Ese movimiento ya no existe.', pregunta: 'monto' };
+    return { linea: `Monto: <b>${pesos(r.monto)}</b> ✓`, aviso: `Quedó en ${pesos(r.monto)}`, pregunta: 'monto' };
+  }
   const m = dato.match(/^c:(g|i):(\d+):(\d+)$/);
   if (!m) return null;
-  await asegurarEsquema();
   const tipo = m[1] === 'g' ? 'gasto' : 'ingreso';
   const r = await db.asignarCuenta(tipo, Number(m[2]), Number(m[3]));
-  if (!r) return { linea: '', aviso: 'Ese movimiento ya tenía cuenta.' };
+  if (!r) return { linea: '', aviso: 'Ese movimiento ya tenía cuenta.', pregunta: 'cuenta' };
   const verbo = tipo === 'gasto' ? 'Salió de' : 'Entró a';
   return {
     linea: `${verbo} <b>${esc(r.cuenta)}</b> · saldo ${pesos(r.saldo)}${r.saldo < 0 ? ' ⚠️ quedó en negativo, revisa el saldo' : ''}`,
     aviso: `${verbo} ${r.cuenta}`,
+    pregunta: 'cuenta',
   };
 }
 
@@ -381,11 +418,15 @@ async function textoDeudas(): Promise<string> {
     .join('\n')}\n\nDebes en total: <b>${pesos(total)}</b>`;
 }
 
+/** Borra el último gasto o ingreso (el más reciente) y devuelve la plata a su cuenta. */
 async function borrarUltimo(): Promise<string> {
-  const g = await db.ultimoGasto();
-  if (!g) return 'No hay gastos para borrar.';
-  await db.borrarGasto(g.id);
-  return `🗑️ Borré: ${esc(g.concepto)} ${pesos(g.monto)}`;
+  const m = await db.ultimoMovimiento();
+  if (!m) return 'No hay movimientos para borrar.';
+  if (m.tipo === 'gasto') await db.borrarGasto(m.id);
+  else await db.borrarIngreso(m.id);
+  const cuenta = m.cuentaId ? (await db.cuentas()).find((c) => c.id === m.cuentaId) : null;
+  return `🗑️ Borré ${m.tipo === 'gasto' ? 'el gasto' : 'el ingreso'}: ${esc(m.concepto)} ${pesos(m.monto)}` +
+    (cuenta ? `\n${esc(cuenta.nombre)} quedó en ${pesos(cuenta.saldo)}.` : '');
 }
 
 async function corregirCategoria(args: string): Promise<string> {

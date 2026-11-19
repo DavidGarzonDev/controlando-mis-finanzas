@@ -88,6 +88,8 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 |---|---|
 | `almuerzo 15 mil` / `gasolina 40k` / `tinto 2500` | Registra el gasto y te dice cuánto te queda hoy |
 | `almuerzo 15` | Lo entiende como $15.000 |
+| `le di 700 a los que cuidan la moto` | Entre 100 y 999 sin unidad decide con sentido común ($700 si es de monedas o si no te alcanza para $700.000) y te deja corregir con un botón |
+| `cancela` / `me equivoqué` / `/borrar` | Borra el último movimiento y devuelve la plata a su cuenta |
 | `me pagaron 1.100.000` / `quincena 1100000` | Registra un ingreso |
 | `tengo 300 mil en efectivo` / `me mandaron 50 mil` / `vendí la bici 200 mil` | También son ingresos, vengan de donde vengan |
 | `/ajuste -20000 no sé en qué` / `/ajuste +5000` | Cuadra la plata cuando lo registrado no coincide con lo real |
@@ -96,7 +98,6 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 | `/resumen` | Cómo vas este mes y en qué se va la plata |
 | `/consejos` | Recomendaciones con tus números (sin IA) |
 | `/cat Salidas` | Corrige la categoría del último gasto y aprende la palabra |
-| `/borrar` | Borra el último gasto (si te equivocaste) |
 
 ### Cuentas, efectivo y transferencias
 

@@ -21,8 +21,10 @@ export async function enviarMensaje(chatId: number | string, texto: string, boto
 }
 
 /** Cambia el texto de un mensaje ya enviado (y quita sus botones). */
-export async function editarMensaje(chatId: number | string, mensajeId: number, texto: string) {
-  await api('editMessageText', { chat_id: chatId, message_id: mensajeId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true });
+export async function editarMensaje(chatId: number | string, mensajeId: number, texto: string, botones?: Boton[][]) {
+  await api('editMessageText', {
+    chat_id: chatId, message_id: mensajeId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: teclado(botones),
+  });
 }
 
 /** Responde al toque de un botón (quita el "cargando" del botón en Telegram). */

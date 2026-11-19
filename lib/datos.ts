@@ -239,6 +239,31 @@ export async function asignarCuenta(tipo: 'gasto' | 'ingreso', id: number, cuent
   return { concepto: String(fila.concepto), monto: n(fila.monto), cuenta: String(c?.nombre ?? ''), saldo: n(c?.saldo) };
 }
 
+/** El último gasto o ingreso registrado (el más reciente de los dos). */
+export async function ultimoMovimiento(): Promise<{ tipo: 'gasto' | 'ingreso'; id: number; concepto: string; monto: number; cuentaId: number | null } | null> {
+  const [r] = await sql()`
+    SELECT * FROM (
+      SELECT 'gasto' AS tipo, id, fecha, concepto, monto, cuenta_id FROM gastos
+      UNION ALL
+      SELECT 'ingreso', id, fecha, concepto, monto, cuenta_id FROM ingresos
+    ) m ORDER BY fecha DESC, id DESC LIMIT 1`;
+  return r ? { tipo: r.tipo as 'gasto' | 'ingreso', id: n(r.id), concepto: String(r.concepto), monto: n(r.monto), cuentaId: nulo(r.cuenta_id) } : null;
+}
+
+/** Cambia el monto de un gasto o ingreso (ej. era $700 y no $700.000). Ajusta el saldo de su cuenta. */
+export async function corregirMonto(tipo: 'gasto' | 'ingreso', id: number, monto: number) {
+  if (tipo === 'gasto') {
+    const [g] = await sql()`SELECT concepto, categoria FROM gastos WHERE id = ${id}`;
+    if (!g) return null;
+    await actualizarGasto(id, { concepto: String(g.concepto), monto, categoria: String(g.categoria) });
+  } else {
+    const [i] = await sql()`SELECT concepto FROM ingresos WHERE id = ${id}`;
+    if (!i) return null;
+    await actualizarIngreso(id, { concepto: String(i.concepto), monto });
+  }
+  return { monto };
+}
+
 // ---------- Transferencias entre cuentas ----------
 
 export async function transferir(t: { desdeId: number | null; haciaId: number | null; monto: number; nota?: string | null }) {

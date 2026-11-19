@@ -5,6 +5,8 @@ export type Interpretado = {
   monto: number;
   concepto: string;
   categoria: Categoria | null;
+  /** "700" sin unidad: puede ser $700 o $700.000. El bot decide con contexto y deja corregir. */
+  ambiguo?: { pesos: number; mil: number };
 };
 
 // Sin \b: con tildes ("recibí") \b no funciona en JavaScript.
@@ -28,15 +30,16 @@ const RELLENO = new Set([
   'gaste', 'gasté', 'pague', 'pagué', 'compre', 'compré', 'en', 'de', 'del', 'el', 'la', 'los', 'las',
   'un', 'una', 'por', 'para', 'y', 'me', 'costo', 'costó', 'valio', 'valió', 'fue', 'fueron', 'pesos',
   'ingreso', 'recibi', 'recibí', 'hoy', 'ayer', 'actualmente', 'ahora', 'tengo', 'llave', 'bre-b', 'breb',
+  'le', 'les', 'di', 'dí', 'lo', 'que', 'al', 'a', 'unos', 'unas', 'me', 'compré', 'compre', 'tomé', 'tome', 'pedí', 'pedi',
 ]);
 
-type Candidato = { valor: number; explicito: boolean; inicio: number; fin: number };
+type Candidato = { valor: number; explicito: boolean; inicio: number; fin: number; numero: number };
 
 const RE_MONTO =
   /\$?\s*(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d{1,2})?)\s*(millones|millon|millón|mill|palos?|mil|lucas?|k)?(?![\p{L}\d])/giu;
 
 /** Extrae el monto de un texto. "15 mil" → 15000, "40k" → 40000, "1.100.000" → 1100000, "1,5 millones" → 1500000. */
-export function extraerMonto(texto: string): { monto: number; resto: string } | null {
+export function extraerMonto(texto: string): { monto: number; resto: string; ambiguo?: { pesos: number; mil: number } } | null {
   const candidatos: Candidato[] = [];
   for (const m of texto.matchAll(RE_MONTO)) {
     const crudo = m[1];
@@ -63,14 +66,18 @@ export function extraerMonto(texto: string): { monto: number; resto: string } | 
       // "almuerzo 15" en Colombia normalmente significa 15 mil
       valor = numero * 1000;
     }
-    candidatos.push({ valor: Math.round(valor), explicito, inicio: m.index!, fin: m.index! + m[0].length });
+    candidatos.push({ valor: Math.round(valor), explicito, inicio: m.index!, fin: m.index! + m[0].length, numero });
   }
   if (!candidatos.length) return null;
 
   const explicitos = candidatos.filter((c) => c.explicito);
   const elegido = (explicitos.length ? explicitos : candidatos).at(-1)!;
   const resto = (texto.slice(0, elegido.inicio) + ' ' + texto.slice(elegido.fin)).replace(/\s+/g, ' ').trim();
-  return { monto: elegido.valor, resto };
+  // 15 → 15 mil es casi seguro; 100 a 999 sin unidad puede ser en pesos (700 de cuidar la moto) o en miles.
+  const ambiguo = !elegido.explicito && Number.isInteger(elegido.numero) && elegido.numero >= 100
+    ? { pesos: elegido.numero, mil: elegido.numero * 1000 }
+    : undefined;
+  return { monto: elegido.valor, resto, ambiguo };
 }
 
 function limpiarConcepto(resto: string): string {
@@ -112,6 +119,7 @@ export function interpretar(texto: string, aprendidas: Record<string, Categoria>
   return {
     tipo,
     monto: m.monto,
+    ambiguo: m.ambiguo,
     concepto,
     categoria: tipo === 'gasto' ? adivinarCategoria(concepto, aprendidas) : null,
   };
