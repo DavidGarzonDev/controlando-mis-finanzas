@@ -201,9 +201,12 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
 
 async function registrar(textoOriginal: string): Promise<Respuesta> {
   // "almuerzo 15 mil con nequi": la cuenta se quita del texto y el gasto sale de esa cuenta.
-  if (/\b(efectivo|cash)\b/i.test(textoOriginal)) await db.cuentaEfectivo();
+  // "en monedas" o "en billetes" también es efectivo.
+  const esEfectivo = /\b(efectivo|cash|monedas?|billetes?)\b/i.test(textoOriginal);
+  if (esEfectivo) await db.cuentaEfectivo();
   const todas = await db.cuentas();
-  const mencionada = cuentaDelTexto(textoOriginal, todas);
+  const efectivo = esEfectivo ? todas.find((c) => c.banco === 'efectivo') : undefined;
+  const mencionada = cuentaDelTexto(textoOriginal, todas) ?? (efectivo ? { c: efectivo, resto: textoOriginal.replace(/\b(en\s+)?(monedas?|billetes?)\b/gi, ' ').replace(/\s+/g, ' ').trim() } : null);
   // Si no dices de qué cuenta: con una sola cuenta (o una principal) se usa esa; con varias, te pregunto con botones.
   const principal = todas.find((c) => c.principal) ?? (todas.length === 1 ? todas[0] : undefined);
   const cuenta = mencionada ?? (principal ? { c: principal, resto: textoOriginal } : null);
@@ -232,11 +235,12 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
   let preguntaMonto: { pesos: number; mil: number } | null = null;
   if (dato.ambiguo) {
     const { pesos: p, mil } = dato.ambiguo;
-    const deMonedas = /\b(cuid\w*|propina|parque\w*|bolsa|tinto|chicle|dulce|moneda\w*|limosna|ba[ñn]o|fotocopia\w*|minuto\w*|peaje)\b/i.test(textoOriginal);
+    const deMonedas = /\b(cuid\w*|propina|parque\w*|bolsa|chicle|dulce|moneda\w*|limosna|ba[ñn]o|fotocopia\w*|minuto\w*|peaje|vigilante|celador|lavaperros|malabar\w*|semaforo|semáforo)\b/i.test(textoOriginal);
     const plata = cuenta ? cuenta.c.saldo : todas.length ? todas.reduce((s, c) => s + c.saldo, 0) : null;
     const noAlcanza = dato.tipo === 'gasto' && plata != null && mil > Math.max(plata, 0);
     dato = { ...dato, monto: deMonedas || noAlcanza ? p : mil };
-    preguntaMonto = dato.ambiguo ?? null;
+    // Si es claramente de monedas (cuidar la moto, propina, "en monedas"…) no hay duda: no pregunto.
+    preguntaMonto = deMonedas ? null : dato.ambiguo ?? null;
   }
 
   const cuentaId = cuenta?.c.id ?? null;
