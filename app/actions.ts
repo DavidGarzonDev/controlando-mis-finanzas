@@ -8,6 +8,12 @@ import { normalizarCategoria } from '@/lib/categorias';
 const texto = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const entero = (fd: FormData, k: string) => Math.max(0, Math.round(Number(String(fd.get(k) ?? '').replace(/[^\d]/g, '')) || 0));
 const idDe = (fd: FormData) => Number(fd.get('id')) || null;
+/** Acabado ('negro', 'oro'…), color libre '#rrggbb' o null (colores del banco). */
+const colorDe = (fd: FormData) => {
+  const c = texto(fd, 'color');
+  return /^[a-z]{3,12}$/.test(c) && c !== 'banco' ? c : /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : null;
+};
+const ultimos4De = (fd: FormData) => texto(fd, 'ultimos4').replace(/\D/g, '').slice(-4) || null;
 
 async function listo() {
   await asegurarEsquema();
@@ -58,7 +64,8 @@ export async function guardarDeuda(fd: FormData) {
     cupo: tipo === 'tarjeta' ? entero(fd, 'cupo') || null : null,
     banco: texto(fd, 'banco') || null,
     franquicia: tipo === 'tarjeta' ? texto(fd, 'franquicia') || null : null,
-    ultimos4: tipo === 'tarjeta' ? texto(fd, 'ultimos4').replace(/\D/g, '').slice(-4) || null : null,
+    ultimos4: tipo === 'tarjeta' ? ultimos4De(fd) : null,
+    color: tipo === 'tarjeta' ? colorDe(fd) : null,
     saldo: entero(fd, 'saldo'),
     cuota: entero(fd, 'cuota'),
     tasa: texto(fd, 'tasa') || null,
@@ -97,7 +104,9 @@ export async function guardarCuenta(fd: FormData) {
     nombre: texto(fd, 'nombre') || 'Cuenta',
     banco: texto(fd, 'banco') || null,
     saldo: entero(fd, 'saldo'),
-    ultimos4: texto(fd, 'ultimos4').replace(/\D/g, '').slice(-4) || null,
+    ultimos4: ultimos4De(fd),
+    franquicia: texto(fd, 'franquicia') || null,
+    color: colorDe(fd),
   });
   revalidatePath('/');
 }

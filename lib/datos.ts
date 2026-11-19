@@ -13,9 +13,14 @@ export type Deuda = {
   banco: string | null;
   franquicia: string | null;
   ultimos4: string | null;
+  /** Acabado elegido ('negro', 'oro'…), un color '#rrggbb' o null para los colores del banco. */
+  color: string | null;
   montoOriginal: number; abonadoMes: number;
 };
-export type Cuenta = { id: number; nombre: string; banco: string | null; saldo: number; ultimos4: string | null; actualizado: string };
+export type Cuenta = {
+  id: number; nombre: string; banco: string | null; saldo: number; ultimos4: string | null;
+  franquicia: string | null; color: string | null; actualizado: string;
+};
 export type Fijo = { id: number; concepto: string; monto: number; pagadoMes: boolean };
 export type Pendiente = { tipo: 'cuota' | 'fijo'; id: number; nombre: string; monto: number };
 export type MesHistorial = { mes: string; ingresos: number; gastos: number };
@@ -120,7 +125,7 @@ export async function ingresosDelMes(): Promise<Ingreso[]> {
 
 export async function deudas(): Promise<Deuda[]> {
   const rows = await sql().query(
-    `SELECT d.id, d.nombre, d.tipo, d.cupo, d.banco, d.franquicia, d.ultimos4, d.saldo, d.cuota, d.tasa, d.prioridad,
+    `SELECT d.id, d.nombre, d.tipo, d.cupo, d.banco, d.franquicia, d.ultimos4, d.color, d.saldo, d.cuota, d.tasa, d.prioridad,
             COALESCE(d.monto_original, d.saldo) AS monto_original,
             COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.deuda_id = d.id AND ${ESTE_MES('a.fecha')}), 0) AS abonado_mes
      FROM deudas d ORDER BY d.prioridad, d.id`,
@@ -132,6 +137,7 @@ export async function deudas(): Promise<Deuda[]> {
     banco: (r.banco as string | null) || null,
     franquicia: (r.franquicia as string | null) || null,
     ultimos4: (r.ultimos4 as string | null) || null,
+    color: (r.color as string | null) || null,
     tasa: (r.tasa as string | null) || null, prioridad: n(r.prioridad),
     montoOriginal: Math.max(n(r.monto_original), n(r.saldo)), abonadoMes: n(r.abonado_mes),
   }));
@@ -141,19 +147,19 @@ export async function guardarDeuda(
   id: number | null,
   d: {
     nombre: string; tipo: TipoCredito; saldo: number; cuota: number; tasa: string | null; prioridad: number;
-    cupo: number | null; banco: string | null; franquicia: string | null; ultimos4: string | null;
+    cupo: number | null; banco: string | null; franquicia: string | null; ultimos4: string | null; color: string | null;
   },
 ) {
   if (id) {
     await sql()`
       UPDATE deudas SET nombre = ${d.nombre}, tipo = ${d.tipo}, cupo = ${d.cupo}, banco = ${d.banco},
-        franquicia = ${d.franquicia}, ultimos4 = ${d.ultimos4}, saldo = ${d.saldo}, cuota = ${d.cuota},
+        franquicia = ${d.franquicia}, ultimos4 = ${d.ultimos4}, color = ${d.color}, saldo = ${d.saldo}, cuota = ${d.cuota},
         tasa = ${d.tasa}, prioridad = ${d.prioridad}, monto_original = GREATEST(COALESCE(monto_original, 0), ${d.saldo})
       WHERE id = ${id}`;
   } else {
     await sql()`
-      INSERT INTO deudas (nombre, tipo, cupo, banco, franquicia, ultimos4, saldo, cuota, tasa, prioridad, monto_original)
-      VALUES (${d.nombre}, ${d.tipo}, ${d.cupo}, ${d.banco}, ${d.franquicia}, ${d.ultimos4}, ${d.saldo}, ${d.cuota}, ${d.tasa}, ${d.prioridad}, ${d.saldo})`;
+      INSERT INTO deudas (nombre, tipo, cupo, banco, franquicia, ultimos4, color, saldo, cuota, tasa, prioridad, monto_original)
+      VALUES (${d.nombre}, ${d.tipo}, ${d.cupo}, ${d.banco}, ${d.franquicia}, ${d.ultimos4}, ${d.color}, ${d.saldo}, ${d.cuota}, ${d.tasa}, ${d.prioridad}, ${d.saldo})`;
   }
 }
 
@@ -212,17 +218,26 @@ export async function abonarDeudaPorId(id: number, monto: number) {
 // ---------- Cuentas (débito y billeteras) ----------
 
 export async function cuentas(): Promise<Cuenta[]> {
-  const rows = await sql()`SELECT id, nombre, banco, saldo, ultimos4, actualizado FROM cuentas ORDER BY saldo DESC, id`;
+  const rows = await sql()`SELECT id, nombre, banco, saldo, ultimos4, franquicia, color, actualizado FROM cuentas ORDER BY saldo DESC, id`;
   return rows.map((r) => ({
     id: n(r.id), nombre: String(r.nombre), banco: (r.banco as string | null) || null, saldo: n(r.saldo),
     ultimos4: (r.ultimos4 as string | null) || null, actualizado: String(r.actualizado),
+    franquicia: (r.franquicia as string | null) || null, color: (r.color as string | null) || null,
   }));
 }
-export async function guardarCuenta(id: number | null, c: { nombre: string; banco: string | null; saldo: number; ultimos4: string | null }) {
+export async function guardarCuenta(
+  id: number | null,
+  c: { nombre: string; banco: string | null; saldo: number; ultimos4: string | null; franquicia: string | null; color: string | null },
+) {
   if (id) {
-    await sql()`UPDATE cuentas SET nombre = ${c.nombre}, banco = ${c.banco}, saldo = ${c.saldo}, ultimos4 = ${c.ultimos4}, actualizado = now() WHERE id = ${id}`;
+    await sql()`
+      UPDATE cuentas SET nombre = ${c.nombre}, banco = ${c.banco}, saldo = ${c.saldo}, ultimos4 = ${c.ultimos4},
+        franquicia = ${c.franquicia}, color = ${c.color}, actualizado = now()
+      WHERE id = ${id}`;
   } else {
-    await sql()`INSERT INTO cuentas (nombre, banco, saldo, ultimos4) VALUES (${c.nombre}, ${c.banco}, ${c.saldo}, ${c.ultimos4})`;
+    await sql()`
+      INSERT INTO cuentas (nombre, banco, saldo, ultimos4, franquicia, color)
+      VALUES (${c.nombre}, ${c.banco}, ${c.saldo}, ${c.ultimos4}, ${c.franquicia}, ${c.color})`;
   }
 }
 export async function actualizarSaldoCuenta(id: number, saldo: number) {

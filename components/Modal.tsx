@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { X } from 'lucide-react';
 import { borrar, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, registrarAbono, registrarCompra } from '@/app/actions';
-import { BANCOS, FRANQUICIAS } from '@/lib/bancos';
+import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
 import { CATEGORIAS } from '@/lib/categorias';
 import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, TipoCredito } from '@/lib/datos';
 import { COLOR_CAT, ICONO_CAT, pesos } from './util';
+import { Plastico } from './Plastico';
 
 export type Editor =
   | { tipo: 'nuevo'; modo: Modo }
@@ -175,26 +176,18 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
                 </label>
               ))}
             </div>
-            <div className="fila2">
-              <Campo label={tipoCredito === 'tarjeta' ? 'Banco' : 'Entidad (opcional)'}>
-                <select name="banco" defaultValue={item?.banco ?? (tipoCredito === 'tarjeta' ? 'bancolombia' : '')} onChange={autoNombre}>
-                  {tipoCredito !== 'tarjeta' && <option value="">Ninguna</option>}
-                  {BANCOS.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
-                </select>
-              </Campo>
-              <Campo label="Nombre" ayuda={tipoCredito === 'tarjeta' ? 'Como la llamas: “AV Villas”, “Nu”' : undefined}>
-                <input name="nombre" required defaultValue={item?.nombre} placeholder={tipoCredito === 'tarjeta' ? 'AV Villas' : 'Addi'} autoComplete="off" />
-              </Campo>
-            </div>
-            {tipoCredito === 'tarjeta' && (
+            {tipoCredito === 'tarjeta' ? (
+              <EditorPlastico clase="credito" item={item} />
+            ) : (
               <div className="fila2">
-                <Campo label="Franquicia">
-                  <select name="franquicia" defaultValue={item?.franquicia ?? 'Visa'}>
-                    {FRANQUICIAS.map((f) => <option key={f}>{f}</option>)}
+                <Campo label="Entidad (opcional)">
+                  <select name="banco" defaultValue={item?.banco ?? ''} onChange={autoNombre}>
+                    <option value="">Ninguna</option>
+                    {BANCOS.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
                   </select>
                 </Campo>
-                <Campo label="Últimos 4 dígitos" ayuda="Solo para reconocerla">
-                  <input name="ultimos4" inputMode="numeric" maxLength={4} pattern="\d{0,4}" defaultValue={item?.ultimos4 ?? ''} placeholder="1234" autoComplete="off" />
+                <Campo label="Nombre">
+                  <input name="nombre" required defaultValue={item?.nombre} placeholder="Addi" autoComplete="off" />
                 </Campo>
               </div>
             )}
@@ -220,20 +213,8 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
 
         {tipo === 'cuenta' && (
           <>
-            <div className="fila2">
-              <Campo label="Banco o billetera">
-                <select name="banco" defaultValue={item?.banco ?? 'bancolombia'} onChange={autoNombre}>
-                  {BANCOS.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
-                </select>
-              </Campo>
-              <Campo label="Nombre"><input name="nombre" required defaultValue={item?.nombre} placeholder="Ahorros Bancolombia" autoComplete="off" /></Campo>
-            </div>
-            <div className="fila2">
-              <Campo label="Saldo actual"><Monto name="saldo" defaultValue={item?.saldo} opcional /></Campo>
-              <Campo label="Últimos 4 dígitos" ayuda="Opcional">
-                <input name="ultimos4" inputMode="numeric" maxLength={4} defaultValue={item?.ultimos4 ?? ''} placeholder="1234" autoComplete="off" />
-              </Campo>
-            </div>
+            <EditorPlastico clase="debito" item={item} />
+            <Campo label="Saldo actual"><Monto name="saldo" defaultValue={item?.saldo} opcional /></Campo>
             <p className="nota">El saldo lo actualizas tú cuando quieras (o desde Telegram: <code>/saldo nequi 250000</code>).</p>
           </>
         )}
@@ -277,6 +258,77 @@ function FormIngreso({ item }: { item?: Ingreso }) {
           <button type="button" key={f} className={concepto === f ? 'chip on' : 'chip'} onClick={() => setConcepto(f)}>{f}</button>
         ))}
       </div>
+    </>
+  );
+}
+
+/**
+ * Banco, nombre, franquicia, últimos 4 y color de una tarjeta, con la tarjeta en vivo arriba.
+ * Sirve para débito y crédito.
+ */
+function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: Partial<Deuda & Cuenta> }) {
+  const [banco, setBanco] = useState(item?.banco ?? 'bancolombia');
+  const [nombre, setNombre] = useState(item?.nombre ?? bancoPorId(item?.banco ?? 'bancolombia').nombre);
+  const [franquicia, setFranquicia] = useState(item?.franquicia ?? (clase === 'credito' ? 'Visa' : 'Mastercard'));
+  const [ultimos4, setUltimos4] = useState(item?.ultimos4 ?? '');
+  const [color, setColor] = useState(item?.color ?? 'banco');
+  const libre = /^#[0-9a-f]{6}$/i.test(color);
+  const delBanco = estiloTarjeta(null, banco);
+
+  function cambiarBanco(id: string) {
+    // El nombre sigue al banco mientras no lo hayas escrito tú.
+    if (!nombre.trim() || BANCOS.some((b) => b.nombre === nombre.trim())) setNombre(id === 'otro' ? '' : bancoPorId(id).nombre);
+    setBanco(id);
+  }
+
+  return (
+    <>
+      <div className="vista-previa" aria-hidden>
+        <Plastico d={{ banco, nombre, franquicia, ultimos4: ultimos4 || null, color: color === 'banco' ? null : color }} clase={clase} />
+      </div>
+      <div className="fila2">
+        <Campo label={clase === 'credito' ? 'Banco' : 'Banco o billetera'}>
+          <select name="banco" value={banco} onChange={(e) => cambiarBanco(e.target.value)}>
+            {BANCOS.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+          </select>
+        </Campo>
+        <Campo label="Nombre" ayuda="Como la llamas en el bot">
+          <input name="nombre" required value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder={clase === 'credito' ? 'AV Villas' : 'Ahorros Bancolombia'} autoComplete="off" />
+        </Campo>
+      </div>
+      <fieldset className="opciones-franq">
+        <legend>Franquicia</legend>
+        {FRANQUICIAS.map((f) => (
+          <label key={f}>
+            <input type="radio" name="franquicia" value={f} checked={franquicia === f} onChange={() => setFranquicia(f)} />
+            <span>{f}</span>
+          </label>
+        ))}
+      </fieldset>
+      <Campo label="Últimos 4 dígitos" ayuda="Opcional, solo para reconocerla">
+        <input name="ultimos4" inputMode="numeric" maxLength={4} value={ultimos4} onChange={(e) => setUltimos4(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1234" autoComplete="off" />
+      </Campo>
+      <fieldset className="colores">
+        <legend>Color de la tarjeta</legend>
+        <input type="hidden" name="color" value={color} />
+        <button type="button" className={color === 'banco' ? 'muestra on' : 'muestra'} aria-pressed={color === 'banco'} onClick={() => setColor('banco')}
+          style={{ '--m1': delBanco.t1, '--m2': delBanco.t2 } as React.CSSProperties} title="Colores del banco">
+          <span className="sr">Colores del banco</span>
+        </button>
+        {ACABADOS.map((a) => (
+          <button type="button" key={a.id} className={`muestra${a.metal ? ' metal' : ''}${color === a.id ? ' on' : ''}`} aria-pressed={color === a.id} onClick={() => setColor(a.id)}
+            style={{ '--m1': a.fondo[0], '--m2': a.fondo[1] } as React.CSSProperties} title={a.nombre}>
+            <span className="sr">{a.nombre}</span>
+          </button>
+        ))}
+        <label className={libre ? 'muestra libre on' : 'muestra libre'} title="Otro color" style={libre ? ({ '--m1': color, '--m2': color } as React.CSSProperties) : undefined}>
+          <span className="sr">Elegir otro color</span>
+          <input type="color" value={libre ? color : '#3d6bff'} onChange={(e) => setColor(e.target.value)} />
+        </label>
+        <small className="colores-nombre">
+          {color === 'banco' ? `Colores de ${bancoPorId(banco).nombre}` : libre ? 'Color personalizado' : ACABADOS.find((a) => a.id === color)?.nombre}
+        </small>
+      </fieldset>
     </>
   );
 }

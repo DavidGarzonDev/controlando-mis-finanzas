@@ -122,7 +122,7 @@ Abre `https://TU-APP.vercel.app`, usuario cualquiera y tu `DASHBOARD_PASSWORD`.
 - **Billetera:** tus cuentas débito y billeteras (Nequi, Daviplata…), tus tarjetas de crédito con cupo disponible y usado, y tus préstamos con la fecha en que quedas libre.
 - **Fijos:** lo que pagas cada mes, para marcarlo cuando lo pagues.
 
-Funciona en modo claro y oscuro. Tip: en el celular, abre el dashboard en Chrome → menú → *Agregar a pantalla principal* y queda como una app.
+Funciona en modo claro y oscuro: el botón del sol/luna arriba alterna entre automático, claro y oscuro. Al crear una tarjeta (débito o crédito) eliges el banco, la franquicia y el color, y la ves en vivo mientras la configuras. Tip: en el celular, abre el dashboard en Chrome → menú → *Agregar a pantalla principal* y queda como una app.
 
 ## Probar en tu computador (opcional)
 

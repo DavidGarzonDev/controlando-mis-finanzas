@@ -13,6 +13,7 @@ import type { Hoy } from '@/lib/fechas';
 import { BarrasHistorial, Calendario, CurvaMes } from './graficas';
 import { Creditos } from './Creditos';
 import { Contador, conTransicion } from './animacion';
+import { BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
 import { COLOR_CAT, ICONO_CAT, claveDia, fechaCorta, hora, mesCortoDe, nombreMes, pesos } from './util';
 
@@ -81,7 +82,7 @@ export default function App(p: Props) {
           <span className="marca-sello" aria-hidden><i /><i /><i /></span>
           <div>
             <h1>Mis Finanzas</h1>
-            <p>{nombreMes(p.hoy.mes)} {p.hoy.anio} · pesos colombianos</p>
+            <p>{nombreMes(p.hoy.mes)} {p.hoy.anio}<span className="solo-ancho"> · pesos colombianos</span></p>
           </div>
         </div>
         <nav className="tabs" role="tablist" aria-label="Secciones" ref={tabsRef} onKeyDown={teclaTabs}>
@@ -102,6 +103,7 @@ export default function App(p: Props) {
             </button>
           ))}
         </nav>
+        <BotonTema avisar={avisar} />
         <button className="btn primario registrar" aria-label="Registrar" onClick={() => setEditor({ tipo: 'nuevo', modo: 'gasto' })}>
           <Plus size={20} aria-hidden /> <span>Registrar</span>
         </button>

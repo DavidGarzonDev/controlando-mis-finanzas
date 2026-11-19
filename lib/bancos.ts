@@ -49,7 +49,46 @@ export const BANCOS: Banco[] = [
   { id: 'otro', nombre: 'Otro banco', alias: [], fondo: ['#3d4659', '#1c2230'], tinta: '#ffffff', acento: '#c9d2e6' },
 ];
 
-export const FRANQUICIAS = ['Visa', 'Mastercard', 'American Express', 'Diners'] as const;
+export const FRANQUICIAS = ['Visa', 'Mastercard', 'American Express', 'Diners', 'Otra'] as const;
+
+/** Acabados para elegir al crear la tarjeta. "banco" usa los colores del banco. */
+export type Acabado = { id: string; nombre: string; fondo: [string, string]; tinta: string; acento: string; metal?: boolean };
+export const ACABADOS: Acabado[] = [
+  { id: 'negro', nombre: 'Negro mate', fondo: ['#2a2c31', '#0c0d10'], tinta: '#f4f4f5', acento: '#9aa0ab' },
+  { id: 'grafito', nombre: 'Grafito metálico', fondo: ['#5b6170', '#262a33'], tinta: '#ffffff', acento: '#d5dae3', metal: true },
+  { id: 'plata', nombre: 'Plata', fondo: ['#e9ecf1', '#a7afbc'], tinta: '#1b1f27', acento: '#4a5263', metal: true },
+  { id: 'oro', nombre: 'Oro', fondo: ['#f1d58a', '#b8893a'], tinta: '#2b1d05', acento: '#5a3d0a', metal: true },
+  { id: 'azul', nombre: 'Azul noche', fondo: ['#1f4bd1', '#0b1f66'], tinta: '#ffffff', acento: '#9fb6ff' },
+  { id: 'morado', nombre: 'Morado', fondo: ['#8a2be2', '#4b0f8a'], tinta: '#ffffff', acento: '#e3c8ff' },
+  { id: 'verde', nombre: 'Verde esmeralda', fondo: ['#0f9d6c', '#065238'], tinta: '#ffffff', acento: '#b8f5dc' },
+  { id: 'turquesa', nombre: 'Turquesa', fondo: ['#17b5c9', '#0a6a7a'], tinta: '#ffffff', acento: '#d2f7fc' },
+  { id: 'rojo', nombre: 'Rojo', fondo: ['#e0312f', '#8f1412'], tinta: '#ffffff', acento: '#ffd3d2' },
+  { id: 'rosa', nombre: 'Rosa', fondo: ['#f06ba8', '#b0306e'], tinta: '#ffffff', acento: '#ffe0ef' },
+  { id: 'naranja', nombre: 'Naranja', fondo: ['#ff8a1f', '#c2550a'], tinta: '#ffffff', acento: '#fff0df' },
+];
+
+/** Blanco o casi negro según qué se lea mejor sobre el color. */
+function tintaPara(hex: string) {
+  const v = hex.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return L > 0.45 ? '#16181d' : '#ffffff';
+}
+
+/**
+ * Colores con que se pinta una tarjeta: el acabado elegido, un color libre ("#1a2b3c")
+ * o, si no eligió nada, los colores del banco.
+ */
+export function estiloTarjeta(color: string | null | undefined, bancoId: string | null | undefined) {
+  const a = ACABADOS.find((x) => x.id === color);
+  if (a) return { t1: a.fondo[0], t2: a.fondo[1], tt: a.tinta, ta: a.acento, metal: !!a.metal };
+  if (color && /^#[0-9a-f]{6}$/i.test(color)) {
+    const tt = tintaPara(color);
+    return { t1: color, t2: `color-mix(in oklab, ${color} 62%, black)`, tt, ta: tt === '#ffffff' ? 'rgb(255 255 255 / 0.85)' : 'rgb(0 0 0 / 0.7)', metal: false };
+  }
+  const b = bancoPorId(bancoId);
+  return { t1: b.fondo[0], t2: b.fondo[1], tt: b.tinta, ta: b.acento, metal: false };
+}
 
 /** Iniciales para el sello: "AV Villas" → "AV", "Banco de Bogotá" → "BB". */
 export function sello(b: Banco): string {

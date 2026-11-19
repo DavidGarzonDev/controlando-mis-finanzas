@@ -57,6 +57,9 @@
   accent-color: var(--azul);
 }
 
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scrollbar-color: var(--linea-fuerte) transparent; }
 body {
@@ -1040,3 +1043,114 @@ select {
   width: 100%;
 }
 select:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-suave); }
+
+
+/* ======================================================================
+   Tema, tarjetas más reales y editor de tarjetas
+   ====================================================================== */
+
+.icono-tema { width: 44px; height: 44px; padding: 0; border-radius: 50%; flex: none; color: var(--tinta-2); }
+.icono-tema span { display: none; }
+@media (min-width: 900px) {
+  .icono-tema { width: auto; height: auto; padding: 10px 14px; border-radius: 12px; }
+  .icono-tema span { display: inline; font-size: 0.88rem; }
+}
+::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; }
+
+/* El plástico: número en relieve, titular y franquicia como impresos */
+.plastico .tarjeta-numero {
+  color: color-mix(in srgb, var(--tt) 92%, transparent);
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.35), 0 -1px 0 rgb(255 255 255 / 0.25);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  letter-spacing: 0.14em;
+}
+.plastico-chip { width: 46px; height: 34px; flex: none; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.25)); }
+.plastico .tarjeta-chip { display: none; }
+.tarjeta-titular { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.tarjeta-titular small { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.18em; opacity: 0.75; }
+.tarjeta-titular .tarjeta-nombre { text-shadow: 0 1px 0 rgb(0 0 0 / 0.25); }
+.plastico-franq { flex: none; white-space: nowrap; line-height: 1; }
+.f-visa { font: italic 900 1.45rem/1 var(--fuente); letter-spacing: -0.02em; transform: skewX(-6deg); }
+.f-master { font-weight: 800; font-size: 1rem; letter-spacing: -0.03em; }
+.f-amex {
+  font-weight: 900;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  padding: 5px 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  max-width: 64px;
+  white-space: normal;
+  text-align: center;
+}
+.f-diners { font: italic 700 0.95rem/1 Georgia, 'Times New Roman', serif; }
+.tarjeta.mini .f-visa { font-size: 1.1rem; }
+.tarjeta.mini .f-master, .tarjeta.mini .f-diners { font-size: 0.82rem; }
+.tarjeta.mini .f-amex { font-size: 0.5rem; padding: 3px 4px; }
+.tarjeta.mini .tarjeta-titular small { font-size: 0.56rem; }
+
+/* Acabado metálico: cepillado fino, como las tarjetas de metal reales */
+.tarjeta.metal {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.35), transparent 55%),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.05) 0 1px, transparent 1px 3px),
+    linear-gradient(135deg, var(--t1), var(--t2) 60%, var(--t1));
+}
+.tarjeta.metal::before { border-color: rgb(255 255 255 / 0.25); }
+
+/* Editor: la tarjeta en vivo */
+.vista-previa { display: grid; place-items: center; padding: 6px 0 2px; perspective: 900px; }
+.vista-previa .tarjeta { max-width: 340px; animation: aparecer 0.45s var(--curva) both; }
+
+.opciones-franq, .colores { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.opciones-franq legend, .colores legend { font-size: 0.84rem; font-weight: 650; color: var(--tinta-2); margin-bottom: 8px; padding: 0; }
+.opciones-franq label { position: relative; }
+.opciones-franq input { position: absolute; opacity: 0; pointer-events: none; }
+.opciones-franq span {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--linea-fuerte);
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--tinta-2);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.opciones-franq input:checked + span { background: var(--tinta); border-color: var(--tinta); color: var(--papel); }
+.opciones-franq input:focus-visible + span { outline: 2px solid var(--azul); outline-offset: 2px; }
+
+.colores { align-items: center; gap: 8px; }
+.muestra {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--papel);
+  background: linear-gradient(135deg, var(--m1), var(--m2));
+  box-shadow: 0 0 0 1px var(--linea-fuerte);
+  cursor: pointer;
+  transition: transform 0.2s var(--curva), box-shadow 0.2s;
+}
+.muestra.metal { background: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.12) 0 1px, transparent 1px 3px), linear-gradient(135deg, var(--m1), var(--m2)); }
+.muestra:hover { transform: scale(1.08); }
+.muestra.on { box-shadow: 0 0 0 2px var(--azul); transform: scale(1.08); }
+.muestra.on::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgb(0 0 0 / 0.35);
+}
+.muestra.libre { background: conic-gradient(#ff4d4d, #ffd84d, #4dff88, #4dd2ff, #7a4dff, #ff4dd2, #ff4d4d); overflow: hidden; }
+.muestra.libre.on { background: var(--m1); }
+.muestra.libre input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.muestra.libre:has(:focus-visible) { outline: 2px solid var(--azul); outline-offset: 2px; }
+.colores-nombre { width: 100%; color: var(--tinta-3); font-size: 0.8rem; }
+
+@media (max-width: 599px) { .solo-ancho { display: none; } }

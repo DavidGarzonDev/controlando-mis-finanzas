@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { Contador } from './animacion';
-import { Check, HandCoins, Landmark, Nfc, Plus, ShoppingCart } from 'lucide-react';
+import { Check, HandCoins, Landmark, Plus, ShoppingCart } from 'lucide-react';
+import { Plastico } from './Plastico';
 import { mesDentroDe, planDeudas } from '@/lib/consejos';
-import { bancoPorId, sello } from '@/lib/bancos';
 import type { Cuenta, Deuda, MovCredito, Resumen } from '@/lib/datos';
 import type { Editor } from './Modal';
 import { fechaCorta, pesos } from './util';
@@ -76,7 +76,7 @@ export function Creditos({ deudas, cuentas, r, mov, hoyClave, abrir }: {
                 className={t.id === elegida?.id ? 'tarjeta-slot elegida' : 'tarjeta-slot'}
                 onClick={() => setSel(t.id)}
               >
-                <TarjetaVisual t={t} />
+                <TarjetaCredito t={t} />
               </button>
             ))}
           </div>
@@ -165,86 +165,37 @@ export function Creditos({ deudas, cuentas, r, mov, hoyClave, abrir }: {
   );
 }
 
-/** Inclina la tarjeta siguiendo el dedo o el mouse, con un brillo que se mueve encima. */
-function inclinar(e: React.PointerEvent<HTMLElement>) {
-  const el = e.currentTarget;
-  const r = el.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width;
-  const y = (e.clientY - r.top) / r.height;
-  el.style.setProperty('--rx', `${(0.5 - y) * 10}deg`);
-  el.style.setProperty('--ry', `${(x - 0.5) * 14}deg`);
-  el.style.setProperty('--mx', `${x * 100}%`);
-  el.style.setProperty('--my', `${y * 100}%`);
-}
-function soltar(e: React.PointerEvent<HTMLElement>) {
-  const el = e.currentTarget;
-  el.style.setProperty('--rx', '0deg');
-  el.style.setProperty('--ry', '0deg');
-}
-
-/** La tarjeta dibujada: color del banco, sello, chip, contactless, últimos 4 y franquicia. */
-export function TarjetaVisual({ t }: { t: Deuda }) {
-  const b = bancoPorId(t.banco);
+function TarjetaCredito({ t }: { t: Deuda }) {
   const disponible = t.cupo ? t.cupo - t.saldo : null;
   return (
-    <span
-      className="tarjeta"
-      onPointerMove={inclinar}
-      onPointerLeave={soltar}
-      style={{ '--t1': b.fondo[0], '--t2': b.fondo[1], '--tt': b.tinta, '--ta': b.acento } as React.CSSProperties}
-    >
-      <span className="tarjeta-cab">
-        <span className="tarjeta-marca">
-          <span className="tarjeta-sello" aria-hidden>{sello(b)}</span>
-          <span className="tarjeta-banco">{t.banco && t.banco !== 'otro' ? b.nombre : t.nombre}</span>
-        </span>
-        {disponible !== null && (
+    <Plastico
+      d={t}
+      clase="credito"
+      arriba={
+        disponible !== null ? (
           <span className="tarjeta-disp">
             <small>Disponible</small>
             <b className="num">{pesos(disponible)}</b>
           </span>
-        )}
-      </span>
-      <span className="tarjeta-medio" aria-hidden>
-        <span className="tarjeta-chip" />
-        <Nfc className="tarjeta-nfc" size={22} />
-      </span>
-      <span className="tarjeta-numero num" aria-label={t.ultimos4 ? `Termina en ${t.ultimos4}` : undefined}>
-        •••• •••• •••• {t.ultimos4 || '••••'}
-      </span>
-      <span className="tarjeta-pie">
-        <span className="tarjeta-nombre">{t.nombre}</span>
-        <span className="tarjeta-franq">{t.franquicia || 'Crédito'}</span>
-      </span>
-    </span>
+        ) : undefined
+      }
+    />
   );
 }
 
 function TarjetaDebito({ c }: { c: Cuenta }) {
-  const b = bancoPorId(c.banco);
   return (
-    <span
-      className="tarjeta mini"
-      onPointerMove={inclinar}
-      onPointerLeave={soltar}
-      style={{ '--t1': b.fondo[0], '--t2': b.fondo[1], '--tt': b.tinta, '--ta': b.acento } as React.CSSProperties}
-    >
-      <span className="tarjeta-cab">
-        <span className="tarjeta-marca">
-          <span className="tarjeta-sello" aria-hidden>{sello(b)}</span>
-          <span className="tarjeta-banco">{b.id !== 'otro' ? b.nombre : c.nombre}</span>
+    <Plastico
+      d={c}
+      clase="debito"
+      mini
+      centro={
+        <span className="tarjeta-saldo">
+          <small>Saldo</small>
+          <b className="num"><Contador valor={c.saldo} /></b>
         </span>
-        <Nfc size={18} aria-hidden className="tarjeta-nfc-mini" />
-      </span>
-      <span className="tarjeta-saldo">
-        <small>Saldo</small>
-        <b className="num"><Contador valor={c.saldo} /></b>
-      </span>
-      <span className="tarjeta-pie">
-        <span className="tarjeta-nombre">{c.nombre}</span>
-        <span className="tarjeta-franq">{c.ultimos4 ? `•• ${c.ultimos4}` : 'Débito'}</span>
-      </span>
-    </span>
+      }
+    />
   );
 }
 

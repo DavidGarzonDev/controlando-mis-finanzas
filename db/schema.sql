@@ -36,6 +36,7 @@ ALTER TABLE deudas ADD COLUMN IF NOT EXISTS cupo INTEGER;
 ALTER TABLE deudas ADD COLUMN IF NOT EXISTS banco TEXT;        -- id de lib/bancos.ts
 ALTER TABLE deudas ADD COLUMN IF NOT EXISTS franquicia TEXT;
 ALTER TABLE deudas ADD COLUMN IF NOT EXISTS ultimos4 TEXT;
+ALTER TABLE deudas ADD COLUMN IF NOT EXISTS color TEXT;        -- acabado ('negro', 'oro'…) o '#rrggbb'
 
 -- Pagos a créditos (restan saldo) y compras con tarjeta (suman saldo)
 CREATE TABLE IF NOT EXISTS abonos (
@@ -62,6 +63,8 @@ CREATE TABLE IF NOT EXISTS cuentas (
   ultimos4    TEXT,
   actualizado TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS franquicia TEXT;
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS color TEXT;
 
 CREATE TABLE IF NOT EXISTS fijos (
   id       SERIAL PRIMARY KEY,
