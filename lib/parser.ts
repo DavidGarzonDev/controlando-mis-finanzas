@@ -8,13 +8,26 @@ export type Interpretado = {
 };
 
 // Sin \b: con tildes ("recibí") \b no funciona en JavaScript.
-const PALABRAS_INGRESO = /^(ingreso|me pagaron|me consignaron|recib[ií]|sueldo|salario|quincena|me lleg[oó])(?=\s|$)/iu;
+const PALABRAS_INGRESO =
+  /^(?:(?:actualmente|ahora|hoy|ya)\s+)?(ingreso|me pagaron|me consignaron|me transfirieron|me giraron|me mandaron|me enviaron|me dieron|me devolvieron|me prestaron|recib[ií]|sueldo|salario|quincena|prima|bono|me lleg[oó]|me entr[oó]|tengo(?!\s+que)|saldo|efectivo|vend[ií])(?=\s|$)/iu;
+
+/** Nombre del ingreso cuando el mensaje no trae más palabras ("me pagaron 1.100.000" → "Ingreso"). */
+function conceptoIngreso(prefijo: string): string {
+  const p = sinTildes(prefijo.toLowerCase());
+  if (/^(sueldo|salario|quincena|prima|bono)$/.test(p)) return p.charAt(0).toUpperCase() + p.slice(1);
+  if (p === 'tengo' || p === 'saldo') return 'Saldo disponible';
+  if (p === 'efectivo') return 'Efectivo';
+  if (p === 'me prestaron') return 'Préstamo';
+  if (p === 'vendi') return 'Venta';
+  if (p === 'me devolvieron') return 'Devolución';
+  return 'Ingreso';
+}
 
 // Palabras de relleno que no aportan al concepto
 const RELLENO = new Set([
   'gaste', 'gasté', 'pague', 'pagué', 'compre', 'compré', 'en', 'de', 'del', 'el', 'la', 'los', 'las',
   'un', 'una', 'por', 'para', 'y', 'me', 'costo', 'costó', 'valio', 'valió', 'fue', 'fueron', 'pesos',
-  'ingreso', 'me pagaron', 'recibi', 'recibí', 'hoy', 'ayer',
+  'ingreso', 'recibi', 'recibí', 'hoy', 'ayer', 'actualmente', 'ahora', 'tengo',
 ]);
 
 type Candidato = { valor: number; explicito: boolean; inicio: number; fin: number };
@@ -93,8 +106,7 @@ export function interpretar(texto: string, aprendidas: Record<string, Categoria>
   let concepto = limpiarConcepto(m.resto);
   if (!concepto) {
     if (tipo !== 'ingreso') return null;
-    const prefijo = t.match(PALABRAS_INGRESO)?.[1]?.toLowerCase() ?? '';
-    concepto = /sueldo|salario|quincena/.test(prefijo) ? prefijo.charAt(0).toUpperCase() + prefijo.slice(1) : 'Ingreso';
+    concepto = conceptoIngreso(t.match(PALABRAS_INGRESO)?.[1] ?? '');
   }
 
   return {

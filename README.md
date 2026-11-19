@@ -51,11 +51,12 @@ Proyecto abierto: cualquiera puede clonarlo y montar su propia versión siguiend
 
 ## Paso 5 — Crear la base de datos (Neon)
 
-1. En tu proyecto de Vercel → pestaña **Storage** → **Create Database** → **Neon** (plan gratis) → conéctala al proyecto. Vercel agrega `DATABASE_URL` solo.
-2. Abre la base de datos en Neon → **SQL Editor**:
-   - Pega y ejecuta todo el contenido de `db/schema.sql`.
-   - (Opcional) Copia `db/seed.example.sql` como `db/seed.sql`, pon tus deudas y gastos fijos, y ejecútalo. O cárgalos después desde el dashboard. (`db/seed.sql` no se sube a GitHub.)
-3. En Vercel → **Deployments** → los tres puntos del último → **Redeploy**, para que tome `DATABASE_URL`.
+1. En tu proyecto de Vercel → pestaña **Storage** → **Create Database** → **Neon** (plan gratis) → conéctala al proyecto.
+   - En **Custom Environment Variable Prefix** escribe `DATABASE` (así la variable queda como `DATABASE_URL`).
+   - Deja sin marcar *Create Database Branch*.
+2. En Vercel → **Deployments** → los tres puntos del último → **Redeploy**, para que tome `DATABASE_URL`.
+3. Listo: **la app crea las tablas sola** la primera vez que abres el dashboard o le escribes al bot (y las actualiza cuando hay versiones nuevas). Si prefieres, también puedes pegar `db/schema.sql` en el **SQL Editor** de Neon.
+4. (Opcional) Copia `db/seed.example.sql` como `db/seed.sql`, pon tus deudas y gastos fijos, y ejecútalo en el SQL Editor. O cárgalos desde el dashboard. (`db/seed.sql` no se sube a GitHub.)
 
 ## Paso 6 — Conectar Telegram con tu app (webhook)
 
@@ -80,31 +81,66 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 
 ## Cómo se usa
 
+### Gastos e ingresos
+
 | Escribes | Qué pasa |
 |---|---|
-| `almuerzo 15 mil` / `gasolina 40k` / `tinto 2500` | Registra el gasto y te dice cuánto te queda |
+| `almuerzo 15 mil` / `gasolina 40k` / `tinto 2500` | Registra el gasto y te dice cuánto te queda hoy |
 | `almuerzo 15` | Lo entiende como $15.000 |
 | `me pagaron 1.100.000` / `quincena 1100000` | Registra un ingreso |
+| `tengo 300 mil en efectivo` / `me mandaron 50 mil` / `vendí la bici 200 mil` | También son ingresos, vengan de donde vengan |
+| `/ajuste -20000 no sé en qué` / `/ajuste +5000` | Cuadra la plata cuando lo registrado no coincide con lo real |
+| `/hoy` | Cuánto puedes gastar hoy y lo que llevas |
 | `/resumen` | Cómo vas este mes y en qué se va la plata |
-| `/hoy` | Lo que gastaste hoy |
-| `/deudas` | Deudas en orden de ataque |
-| `/abono nequi 50000` | Le resta el abono al saldo de Nequi |
+| `/consejos` | Recomendaciones con tus números (sin IA) |
 | `/cat Salidas` | Corrige la categoría del último gasto y aprende la palabra |
 | `/borrar` | Borra el último gasto (si te equivocaste) |
 
+### Tarjetas, créditos y cuentas
+
+| Escribes | Qué pasa |
+|---|---|
+| `hice compra con tarjeta de crédito AV Villas por 120 mil` | Suma la compra a esa tarjeta y te dice el cupo disponible |
+| `compré tenis con la Nu 250 mil a 6 cuotas` | Igual, diferida a 6 cuotas (sube la cuota mensual) |
+| `pagué la cuota de la AV Villas` | Paga lo que falta de la cuota de este mes |
+| `pagué 200 mil a la Nu` / `/abono addi 50000` | Abono a una tarjeta o crédito |
+| `/tarjetas` | Cupo disponible y usado de cada tarjeta |
+| `/deudas` | Todos tus créditos en orden de ataque |
+| `/pendientes` / `/pague gimnasio` | Lo que falta pagar este mes / marcar un gasto fijo como pagado |
+| `/saldo nequi 250000` / `/saldo` | Actualiza el saldo de una cuenta / ver todas |
+
+Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cuando pagas la cuota.
+
 Cuando la IA interpretó el mensaje, la respuesta lleva un 🤖.
 
-**Dashboard:** abre `https://TU-APP.vercel.app`, usuario cualquiera y tu `DASHBOARD_PASSWORD`. Desde ahí editas todo con ventanas (modales).
+### El dashboard
 
-Tip: en el celular, abre el dashboard en Chrome → menú → *Agregar a pantalla principal* y queda como una app.
+Abre `https://TU-APP.vercel.app`, usuario cualquiera y tu `DASHBOARD_PASSWORD`.
+
+- **Resumen:** cuánto puedes gastar hoy hasta tu próximo pago (15 y 30 por defecto; cámbialo con `DIAS_DE_PAGO`), cómo va el mes contra el ritmo que te alcanza, en qué se va la plata comparado con el mes pasado, calendario de gasto por día, recomendaciones y lo que falta pagar.
+- **Movimientos:** todo lo del mes, filtrable por gastos, ingresos o categoría.
+- **Billetera:** tus cuentas débito y billeteras (Nequi, Daviplata…), tus tarjetas de crédito con cupo disponible y usado, y tus préstamos con la fecha en que quedas libre.
+- **Fijos:** lo que pagas cada mes, para marcarlo cuando lo pagues.
+
+Funciona en modo claro y oscuro. Tip: en el celular, abre el dashboard en Chrome → menú → *Agregar a pantalla principal* y queda como una app.
 
 ## Probar en tu computador (opcional)
+
+Con una base de Neon (la misma de Vercel o una nueva):
 
 ```bash
 cp .env.example .env.local   # y llena DATABASE_URL y DASHBOARD_PASSWORD
 npm install
 npm run dev                  # http://localhost:3000
 ```
+
+Sin Neon, con un Postgres normal en tu computador: `scripts/neon-local.mjs` imita la API de Neon.
+
+```bash
+LOCAL_PG_URL=postgresql://postgres@localhost:5432/postgres node scripts/neon-local.mjs
+```
+
+y en `.env.local`: `DATABASE_URL=postgresql://postgres@localhost:5432/postgres` y `NEON_LOCAL_ENDPOINT=http://localhost:4444/sql`.
 
 ## Estructura
 
@@ -113,10 +149,16 @@ app/api/telegram/route.ts  → recibe los mensajes de Telegram
 lib/parser.ts              → intérprete hecho a mano (montos y categorías)
 lib/gemini.ts              → respaldo con IA
 lib/bot.ts                 → comandos y respuestas del bot
-lib/datos.ts               → consultas a la base de datos
-components/App.tsx         → el dashboard (pestañas y modales)
+lib/datos.ts               → consultas a la base de datos y cálculo del resumen
+lib/consejos.ts            → recomendaciones y plan de pago de deudas (bola de nieve)
+lib/bancos.ts              → bancos y billeteras de Colombia (colores de las tarjetas)
+lib/esquema.ts             → crea y actualiza las tablas solas
+components/App.tsx         → el dashboard (pestañas)
+components/Creditos.tsx    → la billetera: cuentas, tarjetas y préstamos
+components/graficas.tsx    → gráficas (SVG propio, sin librerías)
+components/Modal.tsx       → ventanas para registrar y editar
 middleware.ts              → contraseña del dashboard
-db/schema.sql              → tablas
+db/schema.sql              → tablas (referencia)
 db/seed.example.sql        → datos de ejemplo (plantilla)
 ```
 

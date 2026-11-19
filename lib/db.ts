@@ -1,6 +1,9 @@
-import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { neon, neonConfig, type NeonQueryFunction } from '@neondatabase/serverless';
 
 let cliente: NeonQueryFunction<false, false> | null = null;
+
+// Solo para desarrollo local (ver scripts/neon-local.mjs). En Vercel no se define.
+if (process.env.NEON_LOCAL_ENDPOINT) neonConfig.fetchEndpoint = process.env.NEON_LOCAL_ENDPOINT;
 
 /** Conexión a Neon. Se crea la primera vez que se usa, no al compilar. */
 export function sql() {
@@ -11,6 +14,3 @@ export function sql() {
   }
   return cliente;
 }
-
-/** Filtro SQL: "este mes" en hora de Colombia. */
-export const ZONA = 'America/Bogota';

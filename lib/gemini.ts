@@ -8,6 +8,7 @@ Reglas:
 - monto: número entero en pesos, sin puntos ni símbolos.
 - concepto: 1 a 5 palabras, en español, con mayúscula inicial (ej. "Almuerzo", "Gasolina moto").
 - categoria: una de ${CATEGORIAS.join(', ')}. Usa "Otros" si ninguna aplica.
+- Es ingreso si dice que le pagaron, le llegó, le mandaron, vendió algo o que "tiene" una plata ("tengo 300 mil en efectivo").
 - Si el mensaje no describe un gasto ni un ingreso con un monto claro, responde es_transaccion=false.`;
 
 const ESQUEMA = {

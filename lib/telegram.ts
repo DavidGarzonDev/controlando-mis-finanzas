@@ -14,4 +14,4 @@ export function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export const pesos = (v: number) => '$' + Math.round(v).toLocaleString('es-CO');
+export const pesos = (v: number) => (v < 0 ? '−$' : '$') + Math.abs(Math.round(v)).toLocaleString('es-CO');
