@@ -4,7 +4,10 @@ import { interpretarConIA } from './gemini';
 import { generarConsejos, simularPago, tasaMensual } from './consejos';
 import { asegurarEsquema } from './esquema';
 import * as db from './datos';
-import { esc, pesos } from './telegram';
+import { esc, pesos, type Boton } from './telegram';
+
+/** Lo que responde el bot: texto, y a veces botones para tocar (ej. ¿de qué cuenta salió?). */
+export type Respuesta = string | { texto: string; botones: Boton[][] };
 import { bancoEnTexto, bancoPorId } from './bancos';
 
 const AYUDA = `<b>Cómo usarme</b>
@@ -76,7 +79,7 @@ function mejor<T>(items: T[], nombreDe: (x: T) => string, busqueda: string): { i
 
 const PALABRAS_VACIAS = new Set(['con', 'mi', 'mis', 'para', 'por', 'del', 'las', 'los', 'una', 'que']);
 
-export async function manejarMensaje(textoCrudo: string): Promise<string> {
+export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
   await asegurarEsquema();
   const texto = textoCrudo.trim();
   const [comando, ...resto] = texto.split(/\s+/);
@@ -192,14 +195,15 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
   return registrar(texto);
 }
 
-async function registrar(textoOriginal: string): Promise<string> {
+async function registrar(textoOriginal: string): Promise<Respuesta> {
   // "almuerzo 15 mil con nequi": la cuenta se quita del texto y el gasto sale de esa cuenta.
   if (/\b(efectivo|cash)\b/i.test(textoOriginal)) await db.cuentaEfectivo();
   const todas = await db.cuentas();
   const mencionada = cuentaDelTexto(textoOriginal, todas);
-  // Si no dices de qué cuenta, sale de (o entra a) tu cuenta principal, para que los saldos sigan al día.
-  const principal = todas.find((c) => c.principal);
+  // Si no dices de qué cuenta: con una sola cuenta (o una principal) se usa esa; con varias, te pregunto con botones.
+  const principal = todas.find((c) => c.principal) ?? (todas.length === 1 ? todas[0] : undefined);
   const cuenta = mencionada ?? (principal ? { c: principal, resto: textoOriginal } : null);
+  const preguntar = !cuenta && todas.length >= 2;
   const texto = cuenta ? cuenta.resto : textoOriginal;
   const aprendidas = await db.palabrasAprendidas();
   let dato = interpretar(texto, aprendidas);
@@ -231,18 +235,19 @@ async function registrar(textoOriginal: string): Promise<string> {
   if (cuenta && dato.tipo === 'ingreso' && (dato.concepto === 'Saldo disponible' || dato.concepto === 'Ingreso')) dato = { ...dato, concepto: cuenta.c.nombre };
 
   if (dato.tipo === 'ingreso') {
-    await db.insertarIngreso({ concepto: dato.concepto, monto: dato.monto, cuentaId });
+    const idIngreso = await db.insertarIngreso({ concepto: dato.concepto, monto: dato.monto, cuentaId });
     const r = await db.resumen();
-    return [
+    const texto = [
       `💰 Ingreso registrado: <b>${esc(dato.concepto)}</b> ${pesos(dato.monto)}`,
       lineaCuenta,
-      `Ingresos del mes: ${pesos(r.ingresos)} · libre: <b>${pesos(r.disponible)}</b>`,
-      r.disponible > 0 ? `Hoy puedes gastar hasta <b>${pesos(r.presupuestoHoy)}</b> (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '',
+      preguntar ? '' : `Libre: <b>${pesos(r.disponible)}</b>`,
+      !preguntar && r.disponible > 0 ? `Hoy puedes gastar hasta <b>${pesos(r.presupuestoHoy)}</b> (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '',
     ].filter(Boolean).join('\n');
+    return preguntar ? { texto: `${texto}\n¿A dónde entró?`, botones: botonesCuentas('i', idIngreso, todas) } : texto;
   }
 
   const categoria = dato.categoria ?? 'Otros';
-  await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoOriginal, cuentaId });
+  const idGasto = await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoOriginal, cuentaId });
   const r = await db.resumen();
   const quedaHoy = r.presupuestoHoy - r.gastadoHoy;
 
@@ -270,7 +275,34 @@ async function registrar(textoOriginal: string): Promise<string> {
     );
   }
   if (categoria === 'Otros') lineas.push('¿Categoría equivocada? Corrígela con /cat Comida (o la que sea).');
+  if (preguntar) return { texto: `${lineas.join('\n')}\n¿De dónde salió?`, botones: botonesCuentas('g', idGasto, todas) };
   return lineas.join('\n');
+}
+
+/** Un botón por cuenta (de a 3 por fila). El dato viaja como "c:g:<id del gasto>:<id de la cuenta>". */
+function botonesCuentas(tipo: 'g' | 'i', id: number, cuentas: db.Cuenta[]): Boton[][] {
+  const botones = cuentas.slice(0, 9).map((c) => ({ texto: c.nombre, dato: `c:${tipo}:${id}:${c.id}` }));
+  const filas: Boton[][] = [];
+  for (let i = 0; i < botones.length; i += 3) filas.push(botones.slice(i, i + 3));
+  return filas;
+}
+
+/**
+ * Cuando tocas un botón de cuenta: le pone esa cuenta al gasto/ingreso y ajusta el saldo.
+ * Devuelve la línea para reemplazar la pregunta en el mensaje, o null si el botón no es de cuentas.
+ */
+export async function procesarBoton(dato: string): Promise<{ linea: string; aviso: string } | null> {
+  const m = dato.match(/^c:(g|i):(\d+):(\d+)$/);
+  if (!m) return null;
+  await asegurarEsquema();
+  const tipo = m[1] === 'g' ? 'gasto' : 'ingreso';
+  const r = await db.asignarCuenta(tipo, Number(m[2]), Number(m[3]));
+  if (!r) return { linea: '', aviso: 'Ese movimiento ya tenía cuenta.' };
+  const verbo = tipo === 'gasto' ? 'Salió de' : 'Entró a';
+  return {
+    linea: `${verbo} <b>${esc(r.cuenta)}</b> · saldo ${pesos(r.saldo)}${r.saldo < 0 ? ' ⚠️ quedó en negativo, revisa el saldo' : ''}`,
+    aviso: `${verbo} ${r.cuenta}`,
+  };
 }
 
 async function textoResumen(): Promise<string> {

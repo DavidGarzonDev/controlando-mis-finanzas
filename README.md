@@ -110,7 +110,7 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 | `le mandé 50 mil a mi mamá por llave desde bancolombia` | Envío a otra persona (gasto) |
 | `/saldo nequi 250000` / `/saldo` | Corrige el saldo de una cuenta / ver todas |
 
-La primera vez que mencionas el efectivo, se crea solo. Marca una cuenta como **principal** (en Billetera → la cuenta → "Cuenta principal"): los gastos e ingresos que registres sin decir la cuenta salen de (o entran a) esa, y así los saldos siempre están al día.
+La primera vez que mencionas el efectivo, se crea solo. Si escribes un gasto o ingreso **sin decir la cuenta** y tienes varias, el bot te pregunta con botones (**¿De dónde salió?** · Nu · Efectivo · Nequi…): un toque y el saldo queda al día. Si prefieres que nunca pregunte, marca una cuenta como **principal** (Billetera → la cuenta → "Cuenta principal") y se usa esa.
 
 **¿Cómo se calcula "libre"?** Si tienes cuentas registradas: lo que tienes en cuentas y efectivo, menos lo que te falta pagar este mes (cuotas y fijos sin marcar), menos lo apartado en metas. "Hoy puedes gastar" es eso dividido entre los días que faltan para tu próximo pago. Sin cuentas registradas, se usa el balance del mes (ingresos menos cuotas, fijos y gastos).
 

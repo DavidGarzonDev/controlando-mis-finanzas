@@ -1,6 +1,6 @@
-import { manejarMensaje } from '@/lib/bot';
+import { manejarMensaje, procesarBoton, type Respuesta } from '@/lib/bot';
 import { leerMedio } from '@/lib/gemini';
-import { descargarArchivo, enviarMensaje, esc } from '@/lib/telegram';
+import { asegurarWebhookConBotones, descargarArchivo, editarMensaje, enviarMensaje, esc, responderBoton } from '@/lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,6 +54,32 @@ export async function POST(req: Request) {
     return ok();
   }
 
+  // Para que lleguen los toques de los botones (se corrige solo, una vez).
+  await asegurarWebhookConBotones();
+
+  // Tocaron un botón (ej. "¿De dónde salió?" → Nu)
+  const toque = update?.callback_query;
+  if (toque) {
+    const chat = toque.message?.chat?.id;
+    if (String(chat) !== String(process.env.TELEGRAM_CHAT_ID ?? '')) {
+      await responderBoton(toque.id);
+      return ok();
+    }
+    try {
+      const r = await procesarBoton(String(toque.data ?? ''));
+      await responderBoton(toque.id, r?.aviso);
+      if (r?.linea && toque.message) {
+        // Reemplaza la pregunta por la respuesta, dejando el resto del mensaje igual.
+        const original = String(toque.message.text ?? '').replace(/\n?¿(De dónde salió|A dónde entró)\?\s*$/, '');
+        await editarMensaje(chat, toque.message.message_id, `${esc(original)}\n${r.linea}`);
+      }
+    } catch (e) {
+      console.error('Error con el botón', e);
+      await responderBoton(toque.id, 'No pude guardarlo, intenta otra vez');
+    }
+    return ok();
+  }
+
   const msg = update?.message ?? update?.edited_message;
   const chatId = msg?.chat?.id;
   if (!msg || chatId == null) return ok();
@@ -75,9 +101,13 @@ export async function POST(req: Request) {
     }
     // Una nota de voz puede traer varios gastos separados por " ; ".
     const partes = entrada.leido ? entrada.texto.split(/\s*;\s*/).filter(Boolean).slice(0, 5) : [entrada.texto];
-    const respuestas: string[] = [];
+    const respuestas: Respuesta[] = [];
     for (const p of partes) respuestas.push(await manejarMensaje(p));
-    await enviarMensaje(chatId, [entrada.leido, ...respuestas].filter(Boolean).join('\n\n'));
+    // Las respuestas con botones van en su propio mensaje (cada una con sus botones).
+    const simples = respuestas.filter((r): r is string => typeof r === 'string');
+    const conBotones = respuestas.filter((r): r is Exclude<Respuesta, string> => typeof r !== 'string');
+    if (entrada.leido || simples.length) await enviarMensaje(chatId, [entrada.leido, ...simples].filter(Boolean).join('\n\n'));
+    for (const r of conBotones) await enviarMensaje(chatId, r.texto, r.botones);
   } catch (e) {
     console.error('Error procesando mensaje', e);
     await enviarMensaje(chatId, 'Ups, algo falló guardando eso. Intenta de nuevo en un momento.');

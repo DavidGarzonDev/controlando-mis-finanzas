@@ -200,8 +200,9 @@ export async function gastosPorDia(mes = mesClave()): Promise<number[]> {
 // ---------- Ingresos ----------
 
 export async function insertarIngreso(i: { concepto: string; monto: number; cuentaId?: number | null }) {
-  await sql()`INSERT INTO ingresos (concepto, monto, cuenta_id) VALUES (${i.concepto}, ${i.monto}, ${i.cuentaId ?? null})`;
+  const rows = await sql()`INSERT INTO ingresos (concepto, monto, cuenta_id) VALUES (${i.concepto}, ${i.monto}, ${i.cuentaId ?? null}) RETURNING id`;
   await moverCuenta(i.cuentaId, i.monto);
+  return n(rows[0].id);
 }
 export async function actualizarIngreso(id: number, i: { concepto: string; monto: number; cuentaId?: number | null }) {
   const [antes] = await sql()`SELECT monto, cuenta_id FROM ingresos WHERE id = ${id}`;
@@ -220,6 +221,22 @@ export async function ingresosDelMes(mes = mesClave()): Promise<Ingreso[]> {
     `SELECT id, fecha, concepto, monto, cuenta_id FROM ingresos WHERE ${EN_MES('fecha', mes)} ORDER BY fecha DESC, id DESC`,
   );
   return rows.map((r) => ({ id: n(r.id), fecha: String(r.fecha), concepto: String(r.concepto), monto: n(r.monto), cuentaId: nulo(r.cuenta_id) }));
+}
+
+/**
+ * Le pone cuenta a un gasto o ingreso que se registró sin ella (botón del bot). Ajusta el saldo.
+ * Si ya tenía cuenta, no hace nada (evita descontar dos veces si tocan el botón otra vez).
+ */
+export async function asignarCuenta(tipo: 'gasto' | 'ingreso', id: number, cuentaId: number) {
+  const tabla = tipo === 'gasto' ? 'gastos' : 'ingresos';
+  const [fila] = await sql().query(
+    `UPDATE ${tabla} SET cuenta_id = $1 WHERE id = $2 AND cuenta_id IS NULL RETURNING concepto, monto`,
+    [cuentaId, id],
+  );
+  if (!fila) return null;
+  await moverCuenta(cuentaId, tipo === 'gasto' ? -n(fila.monto) : n(fila.monto));
+  const [c] = await sql()`SELECT nombre, saldo FROM cuentas WHERE id = ${cuentaId}`;
+  return { concepto: String(fila.concepto), monto: n(fila.monto), cuenta: String(c?.nombre ?? ''), saldo: n(c?.saldo) };
 }
 
 // ---------- Transferencias entre cuentas ----------
