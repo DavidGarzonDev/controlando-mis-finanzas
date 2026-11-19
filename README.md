@@ -118,12 +118,13 @@ La primera vez que mencionas el efectivo, se crea solo.
 | `hice compra con tarjeta de crédito AV Villas por 120 mil` | Suma la compra a esa tarjeta y te dice el cupo disponible |
 | `compré tenis con la Nu 250 mil a 6 cuotas` | Igual, diferida a 6 cuotas (sube la cuota mensual) |
 | `pagué la cuota de la AV Villas con bancolombia` | Paga lo que falta de la cuota del mes, desde esa cuenta |
+| `ya pagué la cuota de la Nu` | Si la pagaste en el banco y el saldo ya está al día: solo la marca como pagada (no mueve saldos) |
 | `abono a capital nu 200 mil` / `/capital nu 200000` | Abono extra a capital (baja la deuda y los intereses) |
 | `pagué 200 mil a la Nu` / `/abono addi 50000` | Abono a una tarjeta o crédito |
 | `/tarjetas` / `/deudas` | Cupo de cada tarjeta / créditos en orden de ataque |
 | `/pendientes` / `/pague gimnasio` | Lo que falta pagar este mes / marcar un fijo como pagado |
 
-Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cuando pagas la cuota.
+Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cuando pagas la cuota. Desde el próximo extracto se suman solas a la cuota (una compra a 6 cuotas suma monto/6 durante 6 meses); la "cuota fija" de la tarjeta no cambia.
 
 ### Metas, topes y alertas
 

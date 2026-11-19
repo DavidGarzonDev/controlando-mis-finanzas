@@ -21,9 +21,19 @@ export type Deuda = {
   diaPago: number | null;
   diaCorte: number | null;
   montoOriginal: number;
+  /**
+   * `cuota` = lo que toca pagar este mes: la cuota fija (`cuotaBase`) más las compras con tarjeta
+   * que están corriendo (una compra a N cuotas suma monto/N desde el mes siguiente, durante N meses).
+   */
+  cuotaBase: number;
+  cuotaCompras: number;
   /** Lo pagado de la cuota este mes, y lo abonado a capital aparte. */
   abonadoMes: number;
   capitalMes: number;
+  /** true si marcaste la cuota de este mes como pagada (la pagaste por fuera de la app). */
+  marcadaMes: boolean;
+  /** Lo que falta de la cuota de este mes (0 si ya se pagó o se marcó como pagada). */
+  faltaMes: number;
 };
 export type Cuenta = {
   id: number; nombre: string; banco: string | null; saldo: number; ultimos4: string | null;
@@ -229,11 +239,21 @@ export async function deudas(mes = mesClave()): Promise<Deuda[]> {
             d.saldo, d.cuota, d.tasa, d.prioridad,
             COALESCE(d.monto_original, d.saldo) AS monto_original,
             COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.deuda_id = d.id AND a.tipo <> 'capital' AND ${EN_MES('a.fecha', mes)}), 0) AS abonado_mes,
-            COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.deuda_id = d.id AND a.tipo = 'capital' AND ${EN_MES('a.fecha', mes)}), 0) AS capital_mes
+            COALESCE((SELECT SUM(a.monto) FROM abonos a WHERE a.deuda_id = d.id AND a.tipo = 'capital' AND ${EN_MES('a.fecha', mes)}), 0) AS capital_mes,
+            EXISTS (SELECT 1 FROM cuotas_marcadas c WHERE c.deuda_id = d.id AND c.mes = '${mesValido(mes)}') AS marcada,
+            COALESCE((
+              SELECT SUM(ROUND(c.monto::numeric / GREATEST(c.cuotas, 1))) FROM compras_credito c
+              WHERE c.deuda_id = d.id
+                AND (EXTRACT(YEAR FROM to_date('${mesValido(mes)}', 'YYYY-MM')) * 12 + EXTRACT(MONTH FROM to_date('${mesValido(mes)}', 'YYYY-MM')))
+                  - (EXTRACT(YEAR FROM c.fecha AT TIME ZONE '${ZONA}') * 12 + EXTRACT(MONTH FROM c.fecha AT TIME ZONE '${ZONA}'))
+                  BETWEEN 1 AND c.cuotas), 0) AS cuota_compras
      FROM deudas d ORDER BY d.prioridad, d.id`,
   );
-  return rows.map((r) => ({
-    id: n(r.id), nombre: String(r.nombre), saldo: n(r.saldo), cuota: n(r.cuota),
+  return rows.map((r) => {
+    const cuota = Math.min(n(r.saldo), n(r.cuota) + n(r.cuota_compras)) || n(r.cuota);
+    return {
+    id: n(r.id), nombre: String(r.nombre), saldo: n(r.saldo), cuota,
+    cuotaBase: n(r.cuota), cuotaCompras: n(r.cuota_compras),
     tipo: (['tarjeta', 'prestamo', 'otro'].includes(String(r.tipo)) ? r.tipo : 'prestamo') as TipoCredito,
     cupo: nulo(r.cupo),
     banco: (r.banco as string | null) || null,
@@ -244,7 +264,10 @@ export async function deudas(mes = mesClave()): Promise<Deuda[]> {
     diaCorte: nulo(r.dia_corte),
     tasa: (r.tasa as string | null) || null, prioridad: n(r.prioridad),
     montoOriginal: Math.max(n(r.monto_original), n(r.saldo)), abonadoMes: n(r.abonado_mes), capitalMes: n(r.capital_mes),
-  }));
+    marcadaMes: r.marcada === true,
+    faltaMes: r.marcada === true ? 0 : Math.max(0, Math.min(n(r.saldo), cuota - n(r.abonado_mes))),
+  };
+  });
 }
 
 export async function guardarDeuda(
@@ -277,9 +300,9 @@ export async function guardarDeuda(
  */
 export async function registrarCompraCredito(id: number, c: { concepto: string; monto: number; cuotas: number }) {
   const cuotas = Math.max(1, Math.min(72, Math.round(c.cuotas || 1)));
+  // La cuota fija no cambia: la compra se suma sola a la cuota de los próximos meses (ver deudas()).
   const rows = await sql()`
-    UPDATE deudas SET saldo = saldo + ${c.monto}, monto_original = COALESCE(monto_original, 0) + ${c.monto},
-      cuota = cuota + ${Math.round(c.monto / cuotas)}
+    UPDATE deudas SET saldo = saldo + ${c.monto}, monto_original = COALESCE(monto_original, 0) + ${c.monto}
     WHERE id = ${id} RETURNING nombre, saldo, cuota, cupo`;
   if (!rows[0]) return null;
   await sql()`INSERT INTO compras_credito (deuda_id, concepto, monto, cuotas) VALUES (${id}, ${c.concepto}, ${c.monto}, ${cuotas})`;
@@ -403,6 +426,13 @@ export async function guardarFijo(id: number | null, f: { concepto: string; mont
 export async function borrarFijo(id: number) {
   await sql()`DELETE FROM fijos WHERE id = ${id}`;
 }
+/** Marca (o desmarca) la cuota del mes como pagada, sin tocar el saldo de la deuda ni de tus cuentas. */
+export async function marcarCuota(id: number, pagada: boolean, mes = mesClave()) {
+  const m = mesValido(mes);
+  if (pagada) await sql()`INSERT INTO cuotas_marcadas (deuda_id, mes) VALUES (${id}, ${m}) ON CONFLICT DO NOTHING`;
+  else await sql()`DELETE FROM cuotas_marcadas WHERE deuda_id = ${id} AND mes = ${m}`;
+}
+
 export async function marcarFijo(id: number, pagado: boolean, mes = mesClave()) {
   const m = mesValido(mes);
   if (pagado) await sql()`INSERT INTO pagos_fijos (fijo_id, mes) VALUES (${id}, ${m}) ON CONFLICT DO NOTHING`;
@@ -599,8 +629,8 @@ export function calcularResumen(d: {
 
   const pendientes: Pendiente[] = [
     ...d.deudas
-      .filter((x) => x.saldo > 0 && x.cuota > x.abonadoMes)
-      .map((x) => ({ tipo: 'cuota' as const, id: x.id, nombre: x.nombre, monto: Math.min(x.saldo, x.cuota - x.abonadoMes), diaPago: x.diaPago })),
+      .filter((x) => x.faltaMes > 0)
+      .map((x) => ({ tipo: 'cuota' as const, id: x.id, nombre: x.nombre, monto: x.faltaMes, diaPago: x.diaPago })),
     ...d.fijos
       .filter((f) => !f.pagadoMes && f.monto > 0)
       .map((f) => ({ tipo: 'fijo' as const, id: f.id, nombre: f.concepto, monto: f.monto, diaPago: f.diaPago })),

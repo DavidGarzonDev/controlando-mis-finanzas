@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Banknote, X } from 'lucide-react';
 import {
-  aportarMeta, borrar, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, guardarMeta, guardarTopes,
+  aportarMeta, borrar, marcarCuota, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, guardarMeta, guardarTopes,
   registrarAbono, registrarCompra, transferir,
 } from '@/app/actions';
 import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
@@ -116,7 +116,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
     }
   }
 
-  const faltaCuota = tipo === 'abono' && item ? Math.max(0, Math.min(item.saldo, item.cuota - item.abonadoMes)) : 0;
+  const faltaCuota = tipo === 'abono' && item ? item.faltaMes : 0;
 
   return (
     <dialog
@@ -261,7 +261,9 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
             )}
             <div className="fila2">
               <Campo label={tipoCredito === 'tarjeta' ? 'Cupo usado (lo que debes)' : 'Saldo que debes'}><Monto name="saldo" defaultValue={item?.saldo} opcional /></Campo>
-              <Campo label="Cuota al mes"><Monto name="cuota" defaultValue={item?.cuota} opcional /></Campo>
+              <Campo label={tipoCredito === 'tarjeta' ? 'Cuota fija al mes' : 'Cuota al mes'} ayuda={tipoCredito === 'tarjeta' ? 'Sin contar compras nuevas: esas se suman solas' : undefined}>
+                <Monto name="cuota" defaultValue={item?.cuotaBase ?? item?.cuota} opcional />
+              </Campo>
             </div>
             <div className="fila2">
               <Campo label="Tasa de interés" ayuda="Ej. 28% E.A. o 2,1% M.V.">
@@ -300,6 +302,19 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
               Saldo actual <b className="num">{pesos(item.saldo)}</b>
               {faltaCuota > 0 ? <> · falta <b className="num">{pesos(faltaCuota)}</b> de la cuota de este mes</> : <> · la cuota de este mes ya está cubierta</>}
             </p>
+            {faltaCuota > 0 && (
+              <button
+                type="button"
+                className="btn chico ya-pague"
+                onClick={async () => {
+                  await marcarCuota(item.id, true);
+                  avisar(`Cuota de ${item.nombre} marcada como pagada`);
+                  ref.current?.close();
+                }}
+              >
+                Ya la pagué en el banco: solo marcarla como pagada
+              </button>
+            )}
             <FormAbono faltaCuota={faltaCuota} saldo={item.saldo} />
             <SelectorCuenta cuentas={cuentas} etiqueta="¿De qué cuenta salió?" defecto={null} />
           </>
@@ -536,7 +551,10 @@ function FormCompra() {
           </label>
         ))}
       </fieldset>
-      <p className="nota">Sube lo que debes en la tarjeta{cuotas > 1 ? ' y la cuota mensual' : ''}. No resta de tu plata del mes: sale cuando pagas la cuota.</p>
+      <p className="nota">
+        Sube lo que debes en la tarjeta y, desde el próximo extracto, suma su parte a la cuota{cuotas > 1 ? ` durante ${cuotas} meses` : ''}.
+        No resta de tu plata del mes: sale cuando pagas la cuota.
+      </p>
     </>
   );
 }

@@ -1294,7 +1294,12 @@ a.btn { text-decoration: none; color: inherit; }
 .intereses { font-size: 0.86rem; color: var(--tinta-2); padding: 10px 12px; border-radius: 10px; background: var(--ambar-suave); }
 .bloque-lista { background: var(--papel); border: 1px solid var(--linea); border-radius: var(--radio); padding: 4px 14px; }
 
+/* Estado de la cuota del mes en créditos */
+.estado-cuota { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ya-pague { justify-self: start; width: 100%; }
+
 /* Logo de la app en el encabezado */
 .marca-logo { flex: none; width: 44px; height: 44px; filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.18)); transition: transform 0.3s var(--curva); }
 .marca:hover .marca-logo { transform: rotate(-6deg) scale(1.04); }
 @media (max-width: 599px) { .marca-logo { width: 40px; height: 40px; } }
+.desglose { display: block; font-size: 0.72rem; color: var(--tinta-3); font-weight: 500; }

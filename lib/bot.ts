@@ -47,6 +47,7 @@ Y lo que te entra, venga de donde venga:
 También puedes mandarme una <b>nota de voz</b> o la <b>foto de un recibo</b>.
 /saldo nequi 250000 — actualiza el saldo de una cuenta (sin monto: ver saldos)
 /pague gimnasio — marca un gasto fijo o una cuota como pagada
+<code>ya pagué la cuota de la nu</code> — si la pagaste en el banco y el saldo ya está al día: solo la marca
 /ajuste -20000 — cuadra plata que no sabes en qué se fue (o +20000 si te sobra)
 /cat Salidas — corrige la categoría del último gasto (y aprendo)
 /borrar — borra el último gasto
@@ -118,6 +119,9 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
     case '/pagué':
     case '/pagado':
       return marcarPagado(args);
+    case '/yapague':
+    case '/yapagué':
+      return yaPague(args);
     case '/tope':
     case '/topes':
       return topes(args);
@@ -143,6 +147,10 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
       return textoHormiga();
   }
   if (cmd.startsWith('/')) return 'No conozco ese comando. Escribe /ayuda.';
+  // "ya pagué la nu" / "ya pagué la cuota de la av villas": solo marca la cuota (o el fijo) como pagada, sin mover saldos
+  if (/^ya\s+(la\s+|lo\s+)?pagu[eé](?![\p{L}\d])/iu.test(texto)) {
+    return yaPague(texto.replace(/^ya\s+(la\s+|lo\s+)?pagu[eé]\s*/iu, ''));
+  }
   const credito = await creditoDelMensaje(texto);
   if (credito) return credito;
   if (/^ajuste\b/i.test(texto)) return ajustar(texto.replace(/^ajuste\s*/i, ''));
@@ -310,7 +318,7 @@ async function textoDeudas(): Promise<string> {
   const total = ds.reduce((s, d) => s + d.saldo, 0);
   return `<b>💳 Deudas (orden de ataque)</b>\n${ds
     .map((d, i) => {
-      const cuotaLista = d.abonadoMes >= d.cuota && d.cuota > 0 ? ' ✓ cuota del mes' : '';
+      const cuotaLista = d.faltaMes === 0 && d.cuota > 0 ? ' ✓ cuota del mes' : '';
       return `${i + 1}. <b>${esc(d.nombre)}</b> — saldo ${pesos(d.saldo)} · cuota ${pesos(d.cuota)}${d.tasa ? ` · ${esc(d.tasa)}` : ''}${cuotaLista}${i === 0 ? ' ← pagar primero' : ''}`;
     })
     .join('\n')}\n\nDebes en total: <b>${pesos(total)}</b>`;
@@ -371,7 +379,7 @@ async function marcarPagado(args: string): Promise<string> {
   }
   if (d) {
     const deuda = d.item;
-    const falta = Math.min(deuda.saldo, deuda.cuota - deuda.abonadoMes);
+    const falta = deuda.faltaMes;
     if (falta <= 0) return `La cuota de <b>${esc(deuda.nombre)}</b> ya estaba pagada este mes.`;
     const nueva = await db.abonarDeudaPorId(deuda.id, falta);
     return `✓ Cuota de <b>${esc(deuda.nombre)}</b> pagada (${pesos(falta)}). Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>`;
@@ -456,7 +464,7 @@ async function creditoDelMensaje(texto: string): Promise<string | null> {
       const nueva = await db.abonarDeudaPorId(d.id, m.monto, desde, /\bcapital\b/i.test(texto) ? 'capital' : 'cuota');
       return `✓ Pago de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>${textoCupo(d, nueva?.saldo)}${sufijo}`;
     }
-    const falta = Math.min(d.saldo, d.cuota - d.abonadoMes);
+    const falta = d.faltaMes;
     if (falta <= 0) return `La cuota de <b>${esc(d.nombre)}</b> ya estaba pagada este mes.`;
     const monto = m?.monto ?? falta;
     const nueva = await db.abonarDeudaPorId(d.id, monto, desde);
@@ -491,7 +499,8 @@ async function compraConTarjeta(texto: string, credito?: db.Deuda): Promise<stri
   const r = await db.registrarCompraCredito(d.id, { concepto: bonito, monto: m.monto, cuotas });
   if (!r) return 'No pude registrar la compra. Intenta otra vez.';
   const lineas = [
-    `💳 Compra con <b>${esc(r.nombre)}</b>: ${esc(bonito)} ${pesos(m.monto)}${cuotas > 1 ? ` a ${cuotas} cuotas (+${pesos(Math.round(m.monto / cuotas))} a la cuota mensual)` : ''}`,
+    `💳 Compra con <b>${esc(r.nombre)}</b>: ${esc(bonito)} ${pesos(m.monto)}${cuotas > 1 ? ` a ${cuotas} cuotas` : ''}`,
+    `Desde el próximo extracto suma ${pesos(Math.round(m.monto / cuotas))} a la cuota${cuotas > 1 ? `, durante ${cuotas} meses` : ''}.`,
     `Debes en esa tarjeta: <b>${pesos(r.saldo)}</b>`,
   ];
   if (r.cupo) {
@@ -705,4 +714,20 @@ async function envioAPersona(texto: string): Promise<string | null> {
     r.ingresos > 0 ? `Libre en el mes: ${pesos(r.disponible)}` : '',
     `Si te lo van a devolver, cuando te paguen escríbeme: <code>me pagó ${esc(quien.replace(/^(mi|la|el)\s+/i, '') || 'juan')} ${Math.round(m.monto / 1000)} mil por ${esc(origen.c.nombre.toLowerCase())}</code>`,
   ].filter(Boolean).join('\n');
+}
+
+/** Marca como pagada la cuota de un crédito (o un gasto fijo) sin tocar ningún saldo. */
+async function yaPague(args: string): Promise<string> {
+  const busqueda = args.replace(/^(la\s+|el\s+)?(cuota\s+)?(de\s+)?(la\s+|el\s+)?(tarjeta\s+)?/i, '').trim();
+  if (!busqueda) return 'Dime cuál: <code>ya pagué la cuota de la nu</code> o <code>ya pagué el gimnasio</code>.';
+  const [ds, fs] = await Promise.all([db.deudas(), db.fijos()]);
+  const credito = encontrarCredito(busqueda, ds.filter((d) => d.saldo > 0)) ?? mejor(ds.filter((d) => d.saldo > 0), (x) => x.nombre, busqueda)?.item ?? null;
+  const fijo = mejor(fs, (x) => x.concepto, busqueda);
+  if (credito && (!fijo || fijo.puntos < 3)) {
+    if (credito.faltaMes === 0) return `La cuota de <b>${esc(credito.nombre)}</b> ya estaba al día este mes. ✓`;
+    await db.marcarCuota(credito.id, true);
+    return `✓ Marqué la cuota de <b>${esc(credito.nombre)}</b> como pagada este mes. El saldo (${pesos(credito.saldo)}) no cambió.\nSi además quieres registrar el pago y bajar la deuda: <code>pagué la cuota de la ${esc(credito.nombre.toLowerCase())}</code>`;
+  }
+  if (fijo) return marcarPagado(fijo.item.concepto);
+  return `No encontré "${esc(busqueda)}" entre tus créditos ni tus gastos fijos. Mira /pendientes.`;
 }

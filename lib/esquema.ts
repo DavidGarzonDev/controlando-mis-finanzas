@@ -62,6 +62,20 @@ const SENTENCIAS = [
   `CREATE TABLE IF NOT EXISTS aportes_meta (
     id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
     meta_id INTEGER NOT NULL REFERENCES metas(id) ON DELETE CASCADE, monto INTEGER NOT NULL)`,
+  // Cuotas que pagaste por fuera de la app: se marcan como pagadas sin mover saldos
+  `CREATE TABLE IF NOT EXISTS cuotas_marcadas (
+    deuda_id INTEGER NOT NULL REFERENCES deudas(id) ON DELETE CASCADE, mes TEXT NOT NULL,
+    fecha TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (deuda_id, mes))`,
+  // Arreglo de una sola vez: antes cada compra con tarjeta le sumaba su valor a la cuota para siempre.
+  // Ahora la cuota guardada es la fija, y las compras se suman solas solo durante sus cuotas.
+  `CREATE TABLE IF NOT EXISTS migraciones (id TEXT PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM migraciones WHERE id = 'cuota_sin_compras') THEN
+       UPDATE deudas d SET cuota = GREATEST(0, d.cuota - COALESCE(
+         (SELECT SUM(ROUND(c.monto::numeric / GREATEST(c.cuotas, 1))) FROM compras_credito c WHERE c.deuda_id = d.id), 0));
+       INSERT INTO migraciones (id) VALUES ('cuota_sin_compras');
+     END IF;
+   END $$`,
   // Foto diaria de lo que tienes y lo que debes
   `CREATE TABLE IF NOT EXISTS patrimonio_diario (fecha DATE PRIMARY KEY, activos INTEGER NOT NULL, deudas INTEGER NOT NULL)`,
   // Para no mandar el mismo recordatorio dos veces el mismo día

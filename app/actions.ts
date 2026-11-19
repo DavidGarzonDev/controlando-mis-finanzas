@@ -168,6 +168,12 @@ export async function aportarMeta(fd: FormData) {
   refrescar();
 }
 
+export async function marcarCuota(id: number, pagada: boolean, mes?: string) {
+  await listo();
+  await db.marcarCuota(id, pagada, db.mesValido(mes));
+  refrescar();
+}
+
 export async function marcarFijo(id: number, pagado: boolean, mes?: string) {
   await listo();
   await db.marcarFijo(id, pagado, db.mesValido(mes));

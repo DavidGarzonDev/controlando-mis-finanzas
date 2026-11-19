@@ -47,7 +47,7 @@ export async function mensajeDelDia(): Promise<string | null> {
   }
   for (const d of ds) {
     if (d.saldo <= 0 || !d.diaPago) continue;
-    const falta = Math.min(d.saldo, d.cuota - d.abonadoMes);
+    const falta = d.faltaMes;
     if (falta <= 0) continue;
     const dia = diaReal(d.diaPago, h.diasMes);
     if (dia === h.dia) vencen.push(`• <b>Hoy</b>: cuota de ${esc(d.nombre)} ${pesos(falta)}`);

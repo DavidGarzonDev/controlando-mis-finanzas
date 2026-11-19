@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { marcarCuota } from '@/app/actions';
 import { Contador } from './animacion';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, CalendarClock, Check, HandCoins, Landmark, Plus, ShoppingCart, TrendingUp } from 'lucide-react';
 import { Plastico } from './Plastico';
@@ -112,7 +113,11 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
             <section className="tarjeta-detalle" aria-label={`Detalle de ${elegida.nombre}`}>
               <Cupo t={elegida} />
               <dl className="tarjeta-datos">
-                <div><dt>Cuota del mes</dt><dd className="num">{pesos(elegida.cuota)}</dd></div>
+                <div>
+                  <dt>Cuota del mes</dt>
+                  <dd className="num">{pesos(elegida.cuota)}</dd>
+                  {elegida.cuotaCompras > 0 && <small className="desglose num">{pesos(elegida.cuotaBase)} fija + {pesos(elegida.cuotaCompras)} de compras</small>}
+                </div>
                 <div><dt>Tasa</dt><dd>{elegida.tasa || '—'}</dd></div>
                 <div><dt>Orden de pago</dt><dd>{orden.get(elegida.id) ? `#${orden.get(elegida.id)}` : 'Pagada'}</dd></div>
               </dl>
@@ -285,12 +290,36 @@ function Cupo({ t }: { t: Deuda }) {
   );
 }
 
+/**
+ * Estado de la cuota del mes. "Ya la pagué" la marca como pagada sin mover saldos
+ * (para cuando pagaste en el banco y ya pusiste el saldo actualizado).
+ */
 function EstadoCuota({ d, boton, abrir }: { d: Deuda; boton?: boolean; abrir?: (e: Editor) => void }) {
+  const [marcando, iniciar] = useTransition();
   if (d.saldo <= 0) return null;
-  const falta = Math.max(0, Math.min(d.saldo, d.cuota - d.abonadoMes));
-  if (falta === 0) return <span className="ok"><Check size={16} aria-hidden /> Cuota del mes pagada</span>;
-  if (boton && abrir) return <button className="btn chico" onClick={() => abrir({ tipo: 'abono', item: d })}>Pagar · faltan {pesos(falta)} este mes</button>;
-  return <p className="pendiente-cuota">Falta pagar <b className="num">{pesos(falta)}</b> de la cuota de este mes</p>;
+  const marcar = (pagada: boolean) => iniciar(() => marcarCuota(d.id, pagada));
+  if (d.faltaMes === 0) {
+    return (
+      <span className="estado-cuota">
+        <span className="ok"><Check size={16} aria-hidden /> Cuota del mes pagada</span>
+        {d.marcadaMes && (
+          <button className="enlace" onClick={() => marcar(false)} disabled={marcando}>{marcando ? 'Guardando…' : 'Desmarcar'}</button>
+        )}
+      </span>
+    );
+  }
+  return (
+    <span className="estado-cuota">
+      {boton && abrir ? (
+        <button className="btn chico" onClick={() => abrir({ tipo: 'abono', item: d })}>Pagar · faltan {pesos(d.faltaMes)}</button>
+      ) : (
+        <span className="pendiente-cuota">Falta pagar <b className="num">{pesos(d.faltaMes)}</b> de la cuota de este mes</span>
+      )}
+      <button className="btn chico" onClick={() => marcar(true)} disabled={marcando} title="Marca la cuota como pagada sin cambiar el saldo">
+        <Check size={16} aria-hidden /> {marcando ? 'Guardando…' : 'Ya la pagué'}
+      </button>
+    </span>
+  );
 }
 
 function Historial({ mov, hoyClave }: { mov?: MovCredito[]; hoyClave: string }) {
