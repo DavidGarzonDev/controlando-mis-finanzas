@@ -35,6 +35,12 @@ export function fechaCorta(f: string | Date, hoyClave: string) {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
+/** "2027-06-30" → "30 jun 2027". */
+export function fechaLarga(iso: string) {
+  const [a, m, d] = iso.split('-').map(Number);
+  return `${d} ${MESES_CORTOS[m - 1]} ${a}`;
+}
+
 export function hora(f: string | Date) {
   return new Date(f).toLocaleTimeString('es-CO', { timeZone: ZONA, hour: 'numeric', minute: '2-digit' });
 }

@@ -46,6 +46,7 @@ Proyecto abierto: cualquiera puede clonarlo y montar su propia versión siguiend
    | `GEMINI_API_KEY` | tu clave de Gemini |
    | `GEMINI_MODEL` | `gemini-3.1-flash-lite` |
    | `DASHBOARD_PASSWORD` | la contraseña para abrir tu dashboard |
+   | `CRON_SECRET` | otra clave inventada (mínimo 16 caracteres), para los recordatorios diarios por Telegram |
 
 3. Dale **Deploy**. Anota la URL (ej. `https://mis-finanzas-tunombre.vercel.app`).
 
@@ -96,31 +97,57 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 | `/cat Salidas` | Corrige la categoría del último gasto y aprende la palabra |
 | `/borrar` | Borra el último gasto (si te equivocaste) |
 
-### Tarjetas, créditos y cuentas
+### Cuentas, efectivo y transferencias
+
+| Escribes | Qué pasa |
+|---|---|
+| `almuerzo 15 mil con nequi` / `tinto 3000 en efectivo` | El gasto sale de esa cuenta (el saldo se ajusta solo) |
+| `me pagaron 1.100.000 a bancolombia` / `me mandó 40 mil mi mamá por nequi` | El ingreso entra a esa cuenta |
+| `retiré 100 mil de nequi` / `consigné 50 mil en bancolombia` | Pasa plata entre la cuenta y tu efectivo |
+| `pasé 100 mil de bancolombia a nequi` | Transferencia entre tus cuentas (no es gasto) |
+| `le mandé 50 mil a juan por nequi y me dio efectivo` | Cambio: de Nequi a tu efectivo |
+| `le mandé 50 mil a mi mamá por llave desde bancolombia` | Envío a otra persona (gasto) |
+| `/saldo nequi 250000` / `/saldo` | Corrige el saldo de una cuenta / ver todas |
+
+La primera vez que mencionas el efectivo, se crea solo.
+
+### Tarjetas y créditos
 
 | Escribes | Qué pasa |
 |---|---|
 | `hice compra con tarjeta de crédito AV Villas por 120 mil` | Suma la compra a esa tarjeta y te dice el cupo disponible |
 | `compré tenis con la Nu 250 mil a 6 cuotas` | Igual, diferida a 6 cuotas (sube la cuota mensual) |
-| `pagué la cuota de la AV Villas` | Paga lo que falta de la cuota de este mes |
+| `pagué la cuota de la AV Villas con bancolombia` | Paga lo que falta de la cuota del mes, desde esa cuenta |
+| `abono a capital nu 200 mil` / `/capital nu 200000` | Abono extra a capital (baja la deuda y los intereses) |
 | `pagué 200 mil a la Nu` / `/abono addi 50000` | Abono a una tarjeta o crédito |
-| `/tarjetas` | Cupo disponible y usado de cada tarjeta |
-| `/deudas` | Todos tus créditos en orden de ataque |
-| `/pendientes` / `/pague gimnasio` | Lo que falta pagar este mes / marcar un gasto fijo como pagado |
-| `/saldo nequi 250000` / `/saldo` | Actualiza el saldo de una cuenta / ver todas |
+| `/tarjetas` / `/deudas` | Cupo de cada tarjeta / créditos en orden de ataque |
+| `/pendientes` / `/pague gimnasio` | Lo que falta pagar este mes / marcar un fijo como pagado |
 
 Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cuando pagas la cuota.
 
-Cuando la IA interpretó el mensaje, la respuesta lleva un 🤖.
+### Metas, topes y alertas
+
+| Escribes | Qué pasa |
+|---|---|
+| `aparté 100 mil para el viaje` / `/ahorro viaje 100000` | Aporte a una meta de ahorro |
+| `/metas` | Cómo vas con cada meta |
+| `/tope salidas 150000` / `/topes` | Tope mensual por categoría; te aviso al llegar al 80 % |
+| `/suscripciones` / `/hormiga` | Pagos que se repiten / gastos pequeños que se acumulan |
+
+**Notas de voz y fotos:** mándale al bot una nota de voz ("almuerzo quince mil y gasolina cuarenta") o la foto de un recibo, y Gemini la convierte en texto.
+
+**Recordatorios:** cada mañana (7:30 a. m.) el bot te escribe si hay pagos que vencen hoy o mañana, fecha de corte de una tarjeta, o si es día de quincena (cuánto apartar y para qué). Necesita `CRON_SECRET` en Vercel. Ponles **día de pago** a tus fijos y créditos para que funcione.
 
 ### El dashboard
 
 Abre `https://TU-APP.vercel.app`, usuario cualquiera y tu `DASHBOARD_PASSWORD`.
 
 - **Resumen:** cuánto puedes gastar hoy hasta tu próximo pago (15 y 30 por defecto; cámbialo con `DIAS_DE_PAGO`), cómo va el mes contra el ritmo que te alcanza, en qué se va la plata comparado con el mes pasado, calendario de gasto por día, recomendaciones y lo que falta pagar.
-- **Movimientos:** todo lo del mes, filtrable por gastos, ingresos o categoría.
-- **Billetera:** tus cuentas débito y billeteras (Nequi, Daviplata…), tus tarjetas de crédito con cupo disponible y usado, y tus préstamos con la fecha en que quedas libre.
-- **Fijos:** lo que pagas cada mes, para marcarlo cuando lo pagues.
+- **Movimientos:** todo lo del mes (gastos, ingresos y movimientos entre cuentas), con búsqueda, filtros y descarga a Excel.
+- **Billetera:** tu patrimonio en el tiempo; cuentas, débito y efectivo (con botones para mover, retirar y consignar); tarjetas de crédito con cupo, fechas de corte y pago, e intereses estimados; y préstamos con la fecha en que quedas libre.
+- **Plan:** metas de ahorro, topes por categoría y gastos fijos con su día de pago.
+- Arriba a la izquierda, las flechas ‹ › te dejan ver **cualquier mes anterior**.
+- Se puede **instalar como app** en el celular (Chrome → menú → *Agregar a pantalla principal*).
 
 Funciona en modo claro y oscuro: el botón del sol/luna arriba alterna entre automático, claro y oscuro. Al crear una tarjeta (débito o crédito) eliges el banco, la franquicia y el color, y la ves en vivo mientras la configuras. Tip: en el celular, abre el dashboard en Chrome → menú → *Agregar a pantalla principal* y queda como una app.
 
@@ -153,6 +180,9 @@ lib/datos.ts               → consultas a la base de datos y cálculo del resum
 lib/consejos.ts            → recomendaciones y plan de pago de deudas (bola de nieve)
 lib/bancos.ts              → bancos y billeteras de Colombia (colores de las tarjetas)
 lib/esquema.ts             → crea y actualiza las tablas solas
+lib/recordatorios.ts       → el mensaje diario (app/api/cron, programado en vercel.json)
+app/api/exportar/route.ts  → descarga de movimientos en CSV para Excel
+components/Plan.tsx        → metas, topes y gastos fijos
 components/App.tsx         → el dashboard (pestañas)
 components/Creditos.tsx    → la billetera: cuentas, tarjetas y préstamos
 components/graficas.tsx    → gráficas (SVG propio, sin librerías)

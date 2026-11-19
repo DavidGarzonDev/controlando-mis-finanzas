@@ -2,26 +2,39 @@ import App from '@/components/App';
 import * as db from '@/lib/datos';
 import { generarConsejos } from '@/lib/consejos';
 import { asegurarEsquema } from '@/lib/esquema';
-import { hoyEnColombia } from '@/lib/fechas';
+import { hoyEnColombia, mesClave } from '@/lib/fechas';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   await asegurarEsquema();
-  const [resumen, gastos, ingresos, deudas, fijos, porDia, historial, movCredito, cuentas] = await Promise.all([
-    db.resumen(),
-    db.gastosDelMes(),
-    db.ingresosDelMes(),
-    db.deudas(),
-    db.fijos(),
-    db.gastosPorDia(),
-    db.historial(6),
-    db.movimientosCredito(),
-    db.cuentas(),
-  ]);
-  const hoy = hoyEnColombia();
+  const mes = db.mesValido((await searchParams).mes);
+  const esActual = mes === mesClave();
+  if (esActual) await db.registrarPatrimonio().catch(() => {});
+
+  const [resumen, gastos, ingresos, deudas, fijos, porDia, historial, movCredito, cuentas, metas, transferencias, hormiga, suscripciones, patrimonio, meses] =
+    await Promise.all([
+      db.resumen(mes),
+      db.gastosDelMes(mes),
+      db.ingresosDelMes(mes),
+      db.deudas(mes),
+      db.fijos(mes),
+      db.gastosPorDia(mes),
+      db.historial(6, mes),
+      db.movimientosCredito(),
+      db.cuentas(),
+      db.metas(mes),
+      db.transferenciasDelMes(mes),
+      db.gastosHormiga(mes),
+      db.suscripciones(),
+      db.historialPatrimonio(180),
+      db.mesesConDatos(),
+    ]);
+
   return (
     <App
+      mes={mes}
+      meses={meses}
       resumen={resumen}
       gastos={gastos}
       ingresos={ingresos}
@@ -31,8 +44,13 @@ export default async function Page() {
       historial={historial}
       movCredito={movCredito}
       cuentas={cuentas}
-      consejos={generarConsejos(resumen, deudas, fijos)}
-      hoy={hoy}
+      metas={metas}
+      transferencias={transferencias}
+      hormiga={hormiga}
+      suscripciones={suscripciones}
+      patrimonio={patrimonio}
+      consejos={generarConsejos(resumen, deudas, fijos, { metas, hormiga, suscripciones })}
+      hoy={hoyEnColombia()}
     />
   );
 }

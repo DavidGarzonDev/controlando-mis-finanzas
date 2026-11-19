@@ -74,3 +74,42 @@ export async function interpretarConIA(texto: string): Promise<ResultadoIA> {
     return { ok: false, motivo: 'error' };
   }
 }
+
+const PROMPT_AUDIO = `Transcribe esta nota de voz en español de Colombia, en una sola línea y sin comillas.
+Si menciona varios gastos o ingresos, sepáralos con " ; " (ej. "almuerzo 15 mil ; gasolina 40 mil").
+Escribe los montos como los dijo ("15 mil", "1.200.000").`;
+
+const PROMPT_IMAGEN = `Es la foto de un recibo, factura, voucher o pantallazo de pago en Colombia.
+Responde SOLO una línea con: <qué fue, 1 a 4 palabras> <valor total en pesos, solo dígitos>.
+Ejemplos: "Mercado D1 85400", "Gasolina Terpel 60000", "Almuerzo restaurante 23500".
+Si es una transferencia o pago recibido, empieza con "me pagaron". Si no se ve un valor, responde "no se ve el valor".`;
+
+export type ResultadoMedio = { ok: true; texto: string } | { ok: false; motivo: 'sin_clave' | 'limite' | 'error' };
+
+/** Convierte una nota de voz o la foto de un recibo en texto que el bot ya entiende. */
+export async function leerMedio(base64: string, mime: string, tipo: 'audio' | 'imagen'): Promise<ResultadoMedio> {
+  const clave = process.env.GEMINI_API_KEY;
+  if (!clave) return { ok: false, motivo: 'sin_clave' };
+  const modelo = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: tipo === 'audio' ? PROMPT_AUDIO : PROMPT_IMAGEN }, { inlineData: { mimeType: mime, data: base64 } }] }],
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (res.status === 429) return { ok: false, motivo: 'limite' };
+    if (!res.ok) {
+      console.error('Gemini (medio) respondió', res.status, await res.text());
+      return { ok: false, motivo: 'error' };
+    }
+    const data = await res.json();
+    const texto: string = (data?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim();
+    return texto ? { ok: true, texto: texto.replace(/^["'«]|["'»]$/g, '').slice(0, 400) } : { ok: false, motivo: 'error' };
+  } catch (e) {
+    console.error('Error leyendo audio/imagen con Gemini', e);
+    return { ok: false, motivo: 'error' };
+  }
+}

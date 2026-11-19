@@ -9,7 +9,7 @@ export type Interpretado = {
 
 // Sin \b: con tildes ("recibí") \b no funciona en JavaScript.
 const PALABRAS_INGRESO =
-  /^(?:(?:actualmente|ahora|hoy|ya)\s+)?(ingreso|me pagaron|me consignaron|me transfirieron|me giraron|me mandaron|me enviaron|me dieron|me devolvieron|me prestaron|recib[ií]|sueldo|salario|quincena|prima|bono|me lleg[oó]|me entr[oó]|tengo(?!\s+que)|saldo|efectivo|vend[ií])(?=\s|$)/iu;
+  /^(?:(?:actualmente|ahora|hoy|ya)\s+)?(ingreso|me pagaron|me consignaron|me transfirieron|me giraron|me mandaron|me enviaron|me dieron|me devolvieron|me prestaron|me mand[oó]|me envi[oó]|me transfiri[oó]|me consign[oó]|me gir[oó]|me pag[oó]|me devolvi[oó]|me prest[oó]|recib[ií]|sueldo|salario|quincena|prima|bono|me lleg[oó]|me entr[oó]|tengo(?!\s+que)|saldo|efectivo|vend[ií])(?=\s|$)/iu;
 
 /** Nombre del ingreso cuando el mensaje no trae más palabras ("me pagaron 1.100.000" → "Ingreso"). */
 function conceptoIngreso(prefijo: string): string {
@@ -17,7 +17,7 @@ function conceptoIngreso(prefijo: string): string {
   if (/^(sueldo|salario|quincena|prima|bono)$/.test(p)) return p.charAt(0).toUpperCase() + p.slice(1);
   if (p === 'tengo' || p === 'saldo') return 'Saldo disponible';
   if (p === 'efectivo') return 'Efectivo';
-  if (p === 'me prestaron') return 'Préstamo';
+  if (p === 'me prestaron' || p === 'me presto') return 'Préstamo';
   if (p === 'vendi') return 'Venta';
   if (p === 'me devolvieron') return 'Devolución';
   return 'Ingreso';
@@ -27,7 +27,7 @@ function conceptoIngreso(prefijo: string): string {
 const RELLENO = new Set([
   'gaste', 'gasté', 'pague', 'pagué', 'compre', 'compré', 'en', 'de', 'del', 'el', 'la', 'los', 'las',
   'un', 'una', 'por', 'para', 'y', 'me', 'costo', 'costó', 'valio', 'valió', 'fue', 'fueron', 'pesos',
-  'ingreso', 'recibi', 'recibí', 'hoy', 'ayer', 'actualmente', 'ahora', 'tengo',
+  'ingreso', 'recibi', 'recibí', 'hoy', 'ayer', 'actualmente', 'ahora', 'tengo', 'llave', 'bre-b', 'breb',
 ]);
 
 type Candidato = { valor: number; explicito: boolean; inicio: number; fin: number };

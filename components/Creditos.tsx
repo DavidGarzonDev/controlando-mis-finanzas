@@ -2,15 +2,17 @@
 
 import { useState } from 'react';
 import { Contador } from './animacion';
-import { Check, HandCoins, Landmark, Plus, ShoppingCart } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, CalendarClock, Check, HandCoins, Landmark, Plus, ShoppingCart, TrendingUp } from 'lucide-react';
 import { Plastico } from './Plastico';
-import { mesDentroDe, planDeudas } from '@/lib/consejos';
-import type { Cuenta, Deuda, MovCredito, Resumen } from '@/lib/datos';
+import { mesDentroDe, planDeudas, tasaMensual } from '@/lib/consejos';
+import { CurvaPatrimonio } from './graficas';
+import type { Cuenta, Deuda, MovCredito, PuntoPatrimonio, Resumen } from '@/lib/datos';
 import type { Editor } from './Modal';
 import { fechaCorta, pesos } from './util';
 
-export function Creditos({ deudas, cuentas, r, mov, hoyClave, abrir }: {
-  deudas: Deuda[]; cuentas: Cuenta[]; r: Resumen; mov: Record<number, MovCredito[]>; hoyClave: string; abrir: (e: Editor) => void;
+export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir }: {
+  deudas: Deuda[]; cuentas: Cuenta[]; r: Resumen; mov: Record<number, MovCredito[]>; patrimonio: PuntoPatrimonio[]; hoyClave: string;
+  abrir: (e: Editor) => void;
 }) {
   const enCuentas = cuentas.reduce((s, c) => s + c.saldo, 0);
   const tarjetas = deudas.filter((d) => d.tipo === 'tarjeta');
@@ -36,10 +38,35 @@ export function Creditos({ deudas, cuentas, r, mov, hoyClave, abrir }: {
       </div>
       <p className="sub">Cuotas de todos tus créditos: <b className="num">{pesos(r.cuotas)}</b> al mes.</p>
 
+      <section className="bloque" aria-labelledby="t-patrimonio">
+        <div className="bloque-cab">
+          <div>
+            <h2 id="t-patrimonio"><TrendingUp size={18} aria-hidden className="ico-titulo" /> Tu patrimonio</h2>
+            <p className="sub">Lo que tienes (cuentas + metas) menos lo que debes</p>
+          </div>
+          <b className={`patrimonio-cifra num ${enCuentas - total < 0 ? 'neg' : ''}`}><Contador valor={enCuentas - total} /></b>
+        </div>
+        {patrimonio.length >= 2 ? (
+          <CurvaPatrimonio puntos={patrimonio} />
+        ) : (
+          <div className="vacio-caja"><TrendingUp size={18} aria-hidden /><p>Cada día guardo una foto de tu patrimonio. En unos días verás aquí cómo va subiendo (o bajando).</p></div>
+        )}
+      </section>
+
       {/* ---------- Cuentas débito y billeteras ---------- */}
       <div className="bloque-cab">
-        <h2>Cuentas y tarjetas débito</h2>
+        <h2>Cuentas, débito y efectivo</h2>
         <button className="btn chico" onClick={() => abrir({ tipo: 'cuenta' })}><Plus size={16} aria-hidden /> Agregar cuenta</button>
+      </div>
+      <div className="acciones-cuentas">
+        <button className="btn chico" onClick={() => abrir({ tipo: 'transferir', modo: 'transferir' })}><ArrowLeftRight size={16} aria-hidden /> Mover plata</button>
+        <button className="btn chico" onClick={() => abrir({ tipo: 'transferir', modo: 'retiro' })}><ArrowUpFromLine size={16} aria-hidden /> Retirar</button>
+        <button className="btn chico" onClick={() => abrir({ tipo: 'transferir', modo: 'consignacion' })}><ArrowDownToLine size={16} aria-hidden /> Consignar</button>
+        {!cuentas.some((c) => c.banco === 'efectivo') && (
+          <button className="btn chico" onClick={() => abrir({ tipo: 'cuenta', item: { id: 0, nombre: 'Efectivo', banco: 'efectivo', saldo: 0, ultimos4: null, franquicia: 'Otra', color: null, actualizado: '' } })}>
+            <Banknote size={16} aria-hidden /> Agregar efectivo
+          </button>
+        )}
       </div>
       {cuentas.length ? (
         <ul className="carrusel" aria-label="Tus cuentas">
@@ -89,7 +116,9 @@ export function Creditos({ deudas, cuentas, r, mov, hoyClave, abrir }: {
                 <div><dt>Tasa</dt><dd>{elegida.tasa || '—'}</dd></div>
                 <div><dt>Orden de pago</dt><dd>{orden.get(elegida.id) ? `#${orden.get(elegida.id)}` : 'Pagada'}</dd></div>
               </dl>
+              <Fechas d={elegida} />
               <EstadoCuota d={elegida} />
+              <Intereses d={elegida} />
               <div className="tarjeta-acciones">
                 <button className="btn" onClick={() => abrir({ tipo: 'compra', item: elegida })}><ShoppingCart size={18} aria-hidden /> Compra</button>
                 <button className="btn primario" onClick={() => abrir({ tipo: 'abono', item: elegida })}><HandCoins size={18} aria-hidden /> Pagar</button>
@@ -132,7 +161,7 @@ export function Creditos({ deudas, cuentas, r, mov, hoyClave, abrir }: {
                       {n === 1 && <span className="etiqueta">Pagar primero</span>}
                     </span>
                     <span className="fila-sub">
-                      {d.saldo > 0 ? <>Cuota {pesos(d.cuota)}{d.tasa ? ` · ${d.tasa}` : ''}{mes ? ` · termina en ${mesDentroDe(mes)}` : ''}</> : `Pagada · liberaste ${pesos(d.cuota)} al mes`}
+                      {d.saldo > 0 ? <>Cuota {pesos(d.cuota)}{d.diaPago ? ` el día ${d.diaPago}` : ''}{d.tasa ? ` · ${d.tasa}` : ''}{mes ? ` · termina en ${mesDentroDe(mes)}` : ''}</> : `Pagada · liberaste ${pesos(d.cuota)} al mes`}
                     </span>
                   </span>
                   <span className="deuda-saldo num">{pesos(d.saldo)}<small>saldo</small></span>
@@ -199,6 +228,34 @@ function TarjetaDebito({ c }: { c: Cuenta }) {
   );
 }
 
+function Fechas({ d }: { d: Deuda }) {
+  if (!d.diaPago && !d.diaCorte) {
+    return <p className="sub"><CalendarClock size={14} aria-hidden /> Ponle día de pago y de corte (en Editar) y te recuerdo por Telegram.</p>;
+  }
+  return (
+    <p className="fechas-tarjeta">
+      <CalendarClock size={16} aria-hidden />
+      {d.diaCorte && <span>Corte: día <b>{d.diaCorte}</b></span>}
+      {d.diaPago && <span>Pago: día <b>{d.diaPago}</b></span>}
+    </p>
+  );
+}
+
+/** Cuánto pagarías de intereses el próximo mes si solo pagas la cuota, frente a pagar el total. */
+function Intereses({ d }: { d: Deuda }) {
+  const r = tasaMensual(d.tasa);
+  if (!r || d.saldo <= 0) return null;
+  const quedaDespuesDeCuota = Math.max(0, d.saldo - Math.max(d.cuota, d.abonadoMes));
+  const interes = Math.round(quedaDespuesDeCuota * r);
+  if (interes < 1000) return null;
+  return (
+    <p className="intereses">
+      Si pagas solo la cuota, el próximo mes pagarías unos <b className="num">{pesos(interes)}</b> de intereses.
+      {d.tipo === 'tarjeta' ? ' Pagando el total no pagas intereses en compras a 1 cuota.' : ' Un abono a capital los baja.'}
+    </p>
+  );
+}
+
 function Cupo({ t }: { t: Deuda }) {
   if (!t.cupo) {
     return (
@@ -246,7 +303,7 @@ function Historial({ mov, hoyClave }: { mov?: MovCredito[]; hoyClave: string }) 
             {m.tipo === 'abono' ? <HandCoins size={16} /> : <ShoppingCart size={16} />}
           </span>
           <span className="fila-txt">
-            <span className="fila-nombre">{m.tipo === 'abono' ? 'Pago' : m.concepto}</span>
+            <span className="fila-nombre">{m.concepto}</span>
             <span className="fila-sub">{fechaCorta(m.fecha, hoyClave)}{m.cuotas > 1 ? ` · ${m.cuotas} cuotas` : ''}</span>
           </span>
           <span className="puntos" aria-hidden />

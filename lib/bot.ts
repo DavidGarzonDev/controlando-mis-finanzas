@@ -31,6 +31,20 @@ Y lo que te entra, venga de donde venga:
 • <code>compré tenis con la Nu 250 mil a 6 cuotas</code>
 • <code>pagué la cuota de la AV Villas</code> · <code>pagué 200 mil a la Nu</code>
 /tarjetas — cupo disponible de cada tarjeta
+
+<b>Cuentas, topes y metas</b>
+• <code>almuerzo 15 mil con nequi</code> — el gasto sale de esa cuenta
+• <code>pasé 100 mil de bancolombia a nequi</code> — transferencia
+• <code>le mandé 50 mil a juan por nequi y me dio efectivo</code> — cambio a efectivo
+• <code>le mandé 50 mil a mi mamá por llave desde bancolombia</code> — envío (gasto)
+• <code>retiré 100 mil de nequi</code> — pasa al efectivo · <code>consigné 50 mil en bancolombia</code>
+• <code>abono a capital nu 200 mil</code> — abono extra que baja la deuda
+• <code>aparté 100 mil para el viaje</code> — aporte a una meta
+/tope salidas 150000 — tope mensual por categoría (/topes para verlos)
+/metas — cómo vas con tus metas de ahorro
+/suscripciones — pagos que se repiten cada mes
+/hormiga — gastos pequeños que se acumulan
+También puedes mandarme una <b>nota de voz</b> o la <b>foto de un recibo</b>.
 /saldo nequi 250000 — actualiza el saldo de una cuenta (sin monto: ver saldos)
 /pague gimnasio — marca un gasto fijo o una cuota como pagada
 /ajuste -20000 — cuadra plata que no sabes en qué se fue (o +20000 si te sobra)
@@ -104,11 +118,60 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
     case '/pagué':
     case '/pagado':
       return marcarPagado(args);
+    case '/tope':
+    case '/topes':
+      return topes(args);
+    case '/metas':
+      return textoMetas();
+    case '/ahorro':
+    case '/ahorrar':
+      return ahorrar(args);
+    case '/transferir':
+    case '/pase':
+      return transferirCuentas(args);
+    case '/retiro':
+    case '/retirar':
+      return retiroOConsignacion(args, 'retiro');
+    case '/consignar':
+    case '/consignacion':
+      return retiroOConsignacion(args, 'consignacion');
+    case '/capital':
+      return abonar(args, 'capital');
+    case '/suscripciones':
+      return textoSuscripciones();
+    case '/hormiga':
+      return textoHormiga();
   }
   if (cmd.startsWith('/')) return 'No conozco ese comando. Escribe /ayuda.';
   const credito = await creditoDelMensaje(texto);
   if (credito) return credito;
   if (/^ajuste\b/i.test(texto)) return ajustar(texto.replace(/^ajuste\s*/i, ''));
+  // "retiré 100 mil de nequi" → pasa a efectivo; "consigné 50 mil en bancolombia" → sale del efectivo
+  if (/^(retir[eé]|saqu[eé])(?![\p{L}\d])/iu.test(texto) && extraerMonto(texto)) {
+    return retiroOConsignacion(texto.replace(/^\S+\s*/, ''), 'retiro');
+  }
+  if (/^(consign[eé]|deposit[eé])(?![\p{L}\d])/iu.test(texto) && extraerMonto(texto)) {
+    return retiroOConsignacion(texto.replace(/^\S+\s*/, ''), 'consignacion');
+  }
+  // "abono a capital nu 200 mil"
+  if (/\bcapital\b/i.test(texto) && /^(abono|abon[eé]|pagu[eé])/i.test(texto) && extraerMonto(texto)) {
+    return abonar(texto.replace(/^\S+\s*/, '').replace(/^(a\s+)?capital\s*(a|de|en)?\s*(la|el)?\s*/i, ''), 'capital');
+  }
+  // "aparté 100 mil para el viaje", "ahorré 50 mil en el fondo de emergencia"
+  if (/^(apart[eé]|ahorr[eé]|guard[eé])(?![\p{L}\d])/iu.test(texto) && extraerMonto(texto)) {
+    const r = await ahorrar(texto.replace(/^\S+\s*/, ''), true);
+    if (r) return r;
+  }
+  // "le mandé 50 mil a juan por nequi y me dio efectivo" (cambio) o "le mandé 50 mil a mi mamá por nequi" (envío)
+  if (/^(le\s+|les\s+)?(mand[eé]|envi[eé]|transfer[ií]|gir[eé]|consign[eé]|pas[eé])(?![\p{L}\d])/iu.test(texto) && extraerMonto(texto)) {
+    const r = await envioAPersona(texto);
+    if (r) return r;
+  }
+  // "pasé 100 mil de bancolombia a nequi"
+  if (/^(pas[eé]|transfer[ií]|mov[ií]|envi[eé])(?![\p{L}\d])/iu.test(texto) && /\b(de|desde)\b.+\b(a|al|para)\b/i.test(texto)) {
+    const r = await transferirCuentas(texto.replace(/^\S+\s*/, ''), true);
+    if (r) return r;
+  }
   if (/^abono\b/i.test(texto)) return abonar(texto.replace(/^abono\s*(a\s+)?/i, ''));
   // "pagué el gimnasio" sin monto: marca un fijo o una cuota como pagada
   if (/^pagu[eé]\s/i.test(texto) && !extraerMonto(texto)) {
@@ -118,7 +181,11 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
   return registrar(texto);
 }
 
-async function registrar(texto: string): Promise<string> {
+async function registrar(textoOriginal: string): Promise<string> {
+  // "almuerzo 15 mil con nequi": la cuenta se quita del texto y el gasto sale de esa cuenta.
+  if (/\b(efectivo|cash)\b/i.test(textoOriginal)) await db.cuentaEfectivo();
+  const cuenta = cuentaDelTexto(textoOriginal, await db.cuentas());
+  const texto = cuenta ? cuenta.resto : textoOriginal;
   const aprendidas = await db.palabrasAprendidas();
   let dato = interpretar(texto, aprendidas);
   let usoIA = false;
@@ -138,22 +205,34 @@ async function registrar(texto: string): Promise<string> {
     }
   }
 
+  const cuentaId = cuenta?.c.id ?? null;
+  const saldoNuevo = cuenta ? cuenta.c.saldo + (dato.tipo === 'ingreso' ? dato.monto : -dato.monto) : 0;
+  const lineaCuenta = cuenta
+    ? cuenta.c.banco === 'efectivo' && cuenta.c.saldo === 0 && saldoNuevo < 0
+      ? `Lo anoté en tu <b>Efectivo</b>. ¿Cuánto tienes en la billetera? Dímelo así: <code>/saldo efectivo 100000</code>`
+      : `${dato.tipo === 'ingreso' ? 'Entró a' : 'Salió de'} <b>${esc(cuenta.c.nombre)}</b> · saldo ${pesos(saldoNuevo)}${saldoNuevo < 0 ? ' ⚠️ quedó en negativo, revisa el saldo' : ''}`
+    : '';
+  // "tengo 50 mil en efectivo" → el ingreso se llama como la cuenta, no "Saldo disponible"
+  if (cuenta && dato.tipo === 'ingreso' && (dato.concepto === 'Saldo disponible' || dato.concepto === 'Ingreso')) dato = { ...dato, concepto: cuenta.c.nombre };
+
   if (dato.tipo === 'ingreso') {
-    await db.insertarIngreso({ concepto: dato.concepto, monto: dato.monto });
+    await db.insertarIngreso({ concepto: dato.concepto, monto: dato.monto, cuentaId });
     const r = await db.resumen();
     return [
       `💰 Ingreso registrado: <b>${esc(dato.concepto)}</b> ${pesos(dato.monto)}`,
+      lineaCuenta,
       `Ingresos del mes: ${pesos(r.ingresos)} · libre: <b>${pesos(r.disponible)}</b>`,
       r.disponible > 0 ? `Hoy puedes gastar hasta <b>${pesos(r.presupuestoHoy)}</b> (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '',
     ].filter(Boolean).join('\n');
   }
 
   const categoria = dato.categoria ?? 'Otros';
-  await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto });
+  await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoOriginal, cuentaId });
   const r = await db.resumen();
   const quedaHoy = r.presupuestoHoy - r.gastadoHoy;
 
   const lineas = [`✅ <b>${esc(dato.concepto)}</b> ${pesos(dato.monto)} · ${categoria}${usoIA ? ' 🤖' : ''}`];
+  if (lineaCuenta) lineas.push(lineaCuenta);
   if (r.ingresos === 0) {
     lineas.push('Aún no registras ingresos este mes. Escríbeme <code>me pagaron 1100000</code> o <code>tengo 300 mil</code> para calcular cuánto te alcanza.');
   } else if (r.disponible < 0) {
@@ -162,6 +241,18 @@ async function registrar(texto: string): Promise<string> {
     lineas.push(`Hoy te quedan <b>${pesos(quedaHoy)}</b> de ${pesos(r.presupuestoHoy)}. Libre en el mes: ${pesos(r.disponible)}.`);
   } else {
     lineas.push(`⚠️ Hoy te pasaste <b>${pesos(-quedaHoy)}</b> del límite (${pesos(r.presupuestoHoy)}). Mañana el límite baja para compensar.`);
+  }
+  const tope = r.topes[categoria];
+  if (tope) {
+    const usado = r.porCategoria.find((c) => c.categoria === categoria)?.total ?? 0;
+    const pct = Math.round((usado / tope) * 100);
+    lineas.push(
+      usado > tope
+        ? `🔴 ${categoria}: te pasaste del tope (${pesos(usado)} de ${pesos(tope)}).`
+        : pct >= 80
+          ? `🟠 ${categoria}: llevas ${pesos(usado)} de ${pesos(tope)} (${pct} %). Ojo con lo que queda del mes.`
+          : `${categoria}: ${pesos(usado)} de ${pesos(tope)} (${pct} %).`,
+    );
   }
   if (categoria === 'Otros') lineas.push('¿Categoría equivocada? Corrígela con /cat Comida (o la que sea).');
   return lineas.join('\n');
@@ -246,16 +337,24 @@ async function corregirCategoria(args: string): Promise<string> {
   return `Listo: <b>${esc(g.concepto)}</b> ahora es ${categoria}. La próxima vez lo clasifico solo 👍`;
 }
 
-async function abonar(args: string): Promise<string> {
-  const m = extraerMonto(args);
-  const nombre = m?.resto.trim();
-  if (!m || !nombre) return 'Escríbelo así: <code>/abono nequi 50000</code>';
+async function abonar(args: string, tipo: 'cuota' | 'capital' = 'cuota'): Promise<string> {
+  const cs = await db.cuentas();
+  // "/abono nu 50000 con bancolombia": la última parte dice de qué cuenta salió
+  const [principal, ...cola] = args.split(/\s(?:con|desde)\s/i);
+  const desde = cola.length ? cuentaDelTexto(cola.join(' '), cs) : null;
+  const m = extraerMonto(principal);
+  const nombre = m?.resto.replace(/\b(a|al|la|el|capital)\b/gi, ' ').trim();
+  if (!m || !nombre) {
+    return tipo === 'capital' ? 'Escríbelo así: <code>/capital nu 200000</code>' : 'Escríbelo así: <code>/abono nequi 50000</code>';
+  }
   const encontrada = mejor(await db.deudas(), (x) => x.nombre, nombre);
-  const d = encontrada ? await db.abonarDeudaPorId(encontrada.item.id, m.monto) : null;
-  if (!d) return `No encontré una deuda que se llame "${esc(nombre)}". Mira /deudas.`;
-  return d.saldo === 0
-    ? `🎉 ¡Pagaste <b>${esc(d.nombre)}</b> por completo! Esa cuota de ${pesos(d.cuota)} ahora puede ir a la siguiente deuda.`
-    : `Abono de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(d.saldo)}</b>`;
+  const d = encontrada ? await db.abonarDeudaPorId(encontrada.item.id, m.monto, desde?.c.id ?? null, tipo) : null;
+  if (!d) return `No encontré un crédito que se llame "${esc(nombre)}". Mira /deudas.`;
+  const deDonde = desde ? `\nSalió de <b>${esc(desde.c.nombre)}</b>.` : '';
+  if (d.saldo === 0) return `🎉 ¡Pagaste <b>${esc(d.nombre)}</b> por completo! Esa cuota de ${pesos(d.cuota)} ahora puede ir a la siguiente deuda.${deDonde}`;
+  return tipo === 'capital'
+    ? `💪 Abono a capital de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(d.saldo)}</b>. Así pagas menos intereses.${deDonde}`
+    : `Abono de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(d.saldo)}</b>${deDonde}`;
 }
 
 async function marcarPagado(args: string): Promise<string> {
@@ -326,11 +425,20 @@ async function creditoDelMensaje(texto: string): Promise<string | null> {
   const mencionaTarjeta = /\b(tarjeta|t\.?c\.?|cr[eé]dito)\b/i.test(texto);
   // Sin \b: después de una tilde ("compré", "pagué") \b no funciona en JavaScript.
   const esPago = /^(pagu[eé]|abon[eé])(?![\p{L}\d])/iu.test(texto);
-  const esCompra = (/(?<![\p{L}\d])(compr[\p{L}]*|hice|gast[eé])(?![\p{L}\d])/iu.test(texto) || esPago) && (mencionaTarjeta || /\bcon\b/i.test(texto));
+  // Un pago de cuota o abono ("pagué la cuota de la AV Villas con bancolombia") no es una compra.
+  const esAbono = esPago && /\b(cuota|capital|abono)\b/i.test(texto);
+  const esCompra = !esAbono && (/(?<![\p{L}\d])(compr[\p{L}]*|hice|gast[eé])(?![\p{L}\d])/iu.test(texto) || esPago) && (mencionaTarjeta || /\bcon\b/i.test(texto));
   if (!mencionaTarjeta && !bancoEnTexto(texto) && !(esPago && /\bcuota\b/i.test(texto))) return null;
 
+  // "...con bancolombia" al final dice de qué cuenta salió la plata: no es el crédito.
+  const partes = texto.split(/\s(?:con|desde)\s(?=(?:la |el |mi )?(?:cuenta|ahorros|nequi|daviplata|efectivo|bancolombia|dale|movii|uala|lulo|nu|av villas|avvillas|banco))/i);
+  const cs = await db.cuentas();
+  const pagoDesde = esPago && partes.length > 1 ? cuentaDelTexto(partes.slice(1).join(' '), cs) : null;
+  const textoCredito = pagoDesde ? partes[0] : texto;
   const ds = await db.deudas();
-  const d = encontrarCredito(texto, ds);
+  const d = encontrarCredito(textoCredito, ds);
+  // Sin decir "tarjeta" o "crédito", si el banco coincide con una cuenta débito, es un gasto normal desde esa cuenta.
+  if (d && !mencionaTarjeta && !esPago && cuentaDelTexto(texto, cs)) return null;
   if (!d) {
     if (!mencionaTarjeta) return null;
     const tarjetas = ds.filter((x) => x.tipo === 'tarjeta');
@@ -339,18 +447,20 @@ async function creditoDelMensaje(texto: string): Promise<string | null> {
       : 'Aún no tienes tarjetas registradas. Agrégalas en el dashboard, pestaña Billetera.';
   }
 
-  if (esCompra) return compraConTarjeta(texto, d);
+  if (esCompra && !(esPago && pagoDesde)) return compraConTarjeta(texto, d);
   if (esPago) {
     const m = extraerMonto(texto.replace(RE_CUOTAS, ' '));
+    const desde = pagoDesde?.c.id ?? null;
+    const sufijo = pagoDesde ? `\nSalió de <b>${esc(pagoDesde.c.nombre)}</b>.` : '';
     if (m && !/\bcuota\b/i.test(texto)) {
-      const nueva = await db.abonarDeudaPorId(d.id, m.monto);
-      return `✓ Pago de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>${textoCupo(d, nueva?.saldo)}`;
+      const nueva = await db.abonarDeudaPorId(d.id, m.monto, desde, /\bcapital\b/i.test(texto) ? 'capital' : 'cuota');
+      return `✓ Pago de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>${textoCupo(d, nueva?.saldo)}${sufijo}`;
     }
     const falta = Math.min(d.saldo, d.cuota - d.abonadoMes);
     if (falta <= 0) return `La cuota de <b>${esc(d.nombre)}</b> ya estaba pagada este mes.`;
     const monto = m?.monto ?? falta;
-    const nueva = await db.abonarDeudaPorId(d.id, monto);
-    return `✓ Cuota de <b>${esc(d.nombre)}</b> pagada (${pesos(monto)}). Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>${textoCupo(d, nueva?.saldo)}`;
+    const nueva = await db.abonarDeudaPorId(d.id, monto, desde);
+    return `✓ Cuota de <b>${esc(d.nombre)}</b> pagada (${pesos(monto)}). Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>${textoCupo(d, nueva?.saldo)}${sufijo}`;
   }
   return null;
 }
@@ -417,4 +527,182 @@ async function saldoCuenta(args: string): Promise<string> {
   if (!c) return `No encontré esa cuenta. Tienes: ${cs.map((x) => esc(x.nombre)).join(', ') || 'ninguna'}. Ej: <code>/saldo nequi 250000</code>`;
   await db.actualizarSaldoCuenta(c.id, m.monto);
   return `🏦 Saldo de <b>${esc(c.nombre)}</b>: ${pesos(m.monto)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Cuentas de origen, transferencias, topes, metas, suscripciones y hormiga
+
+/** La cuenta débito que menciona el texto ("con nequi", "en efectivo", "de bancolombia"), y el texto sin ella. */
+function cuentaDelTexto(texto: string, cs: db.Cuenta[]): { c: db.Cuenta; resto: string } | null {
+  if (!cs.length) return null;
+  const t = ` ${normal(texto)} `;
+  let mejor: { c: db.Cuenta; frase: string } | null = null;
+  for (const c of cs) {
+    const frases = [normal(c.nombre), ...(c.banco ? bancoPorId(c.banco).alias.map(normal) : [])].filter((f) => f.length >= 2);
+    for (const f of frases) {
+      if (t.includes(` ${f} `) && (!mejor || f.length > mejor.frase.length)) mejor = { c, frase: f };
+    }
+  }
+  if (!mejor) return null;
+  // Quita "con/en/de/desde/por (la|el|mi)? <frase>" del texto original, sin importar tildes ni mayúsculas.
+  const palabras = texto.split(/\s+/);
+  const objetivo = mejor.frase.split(' ');
+  for (let i = 0; i + objetivo.length <= palabras.length; i++) {
+    const tramo = palabras.slice(i, i + objetivo.length).map((w) => normal(w)).join(' ');
+    if (tramo === mejor.frase) {
+      let inicio = i;
+      if (inicio > 0 && /^(la|el|mi)$/i.test(normal(palabras[inicio - 1]))) inicio--;
+      if (inicio > 0 && /^(con|en|de|desde|por|a|al)$/i.test(normal(palabras[inicio - 1]))) inicio--;
+      const resto = [...palabras.slice(0, inicio), ...palabras.slice(i + objetivo.length)].join(' ').trim();
+      return { c: mejor.c, resto: resto || texto };
+    }
+  }
+  return { c: mejor.c, resto: texto };
+}
+
+async function transferirCuentas(args: string, natural = false): Promise<string> {
+  const m = extraerMonto(args);
+  const partes = args.match(/\b(?:de|desde)\s+(.+?)\s+(?:a|al|para)\s+(.+)$/i);
+  if (!m || !partes) {
+    return natural ? '' : 'Escríbelo así: <code>/transferir 100000 de bancolombia a nequi</code>';
+  }
+  const cs = await db.cuentas();
+  const desde = cuentaDelTexto(partes[1].replace(/[\d.,$]+\s*(mil|k)?/gi, ' '), cs);
+  const hacia = cuentaDelTexto(partes[2].replace(/[\d.,$]+\s*(mil|k)?/gi, ' '), cs);
+  if (!desde || !hacia || desde.c.id === hacia.c.id) {
+    return natural ? '' : `No encontré esas dos cuentas. Tienes: ${cs.map((c) => esc(c.nombre)).join(', ') || 'ninguna'}.`;
+  }
+  await db.transferir({ desdeId: desde.c.id, haciaId: hacia.c.id, monto: m.monto });
+  const aviso = desde.c.saldo - m.monto < 0 ? `\n⚠️ ${esc(desde.c.nombre)} quedó en negativo: revisa su saldo con /saldo.` : '';
+  return `🔁 Pasaste ${pesos(m.monto)} de <b>${esc(desde.c.nombre)}</b> (${pesos(desde.c.saldo - m.monto)}) a <b>${esc(hacia.c.nombre)}</b> (${pesos(hacia.c.saldo + m.monto)}).${aviso}`;
+}
+
+async function topes(args: string): Promise<string> {
+  const m = extraerMonto(args);
+  if (m) {
+    const categoria = normalizarCategoria(m.resto);
+    if (!categoria) return `¿Para qué categoría? Ej: <code>/tope salidas 150000</code>\nOpciones: ${CATEGORIAS.join(', ')}`;
+    await db.guardarTope(categoria, m.monto);
+    return `Listo: tope de <b>${categoria}</b> en ${pesos(m.monto)} al mes. Te aviso cuando vayas en 80 %.`;
+  }
+  const r = await db.resumen();
+  const lista = Object.entries(r.topes);
+  if (!lista.length) return 'No tienes topes. Ponle uno a una categoría: <code>/tope salidas 150000</code>';
+  return `<b>Topes de este mes</b>\n${lista
+    .map(([c, t]) => {
+      const usado = r.porCategoria.find((x) => x.categoria === c)?.total ?? 0;
+      const icono = usado > t ? '🔴' : usado >= t * 0.8 ? '🟠' : '🟢';
+      return `${icono} ${c}: ${pesos(usado)} de ${pesos(t)}`;
+    })
+    .join('\n')}`;
+}
+
+async function textoMetas(): Promise<string> {
+  const ms = await db.metas();
+  if (!ms.length) return 'No tienes metas de ahorro. Créalas en el dashboard, pestaña Plan (ej. fondo de emergencia).';
+  return `<b>🎯 Tus metas</b>\n${ms
+    .map((m) => {
+      const pct = m.objetivo ? Math.min(100, Math.round((m.ahorrado / m.objetivo) * 100)) : 0;
+      return `• <b>${esc(m.nombre)}</b>: ${pesos(m.ahorrado)} de ${pesos(m.objetivo)} (${pct} %)${m.fechaMeta ? ` · para el ${m.fechaMeta.split('-').reverse().join('/')}` : ''}`;
+    })
+    .join('\n')}\n\nPara aportar: <code>aparté 100 mil para ${esc(ms[0].nombre.toLowerCase())}</code>`;
+}
+
+async function ahorrar(args: string, natural = false): Promise<string> {
+  const m = extraerMonto(args);
+  const ms = await db.metas();
+  if (!m) return natural ? '' : 'Escríbelo así: <code>/ahorro viaje 100000</code>';
+  const meta = mejor(ms, (x) => x.nombre, m.resto.replace(/^(para|en|a|al)\s+(el|la|mi)?\s*/i, ''));
+  if (!meta) {
+    if (natural) return '';
+    return ms.length ? `¿A qué meta? Tienes: ${ms.map((x) => esc(x.nombre)).join(', ')}.` : 'No tienes metas. Créalas en el dashboard, pestaña Plan.';
+  }
+  await db.aportarMeta(meta.item.id, m.monto);
+  const total = meta.item.ahorrado + m.monto;
+  const pct = meta.item.objetivo ? Math.min(100, Math.round((total / meta.item.objetivo) * 100)) : 0;
+  return `🎯 ${pesos(m.monto)} a <b>${esc(meta.item.nombre)}</b>. Llevas ${pesos(total)} de ${pesos(meta.item.objetivo)} (${pct} %).${pct >= 100 ? ' ¡Meta cumplida! 🎉' : ''}`;
+}
+
+async function textoSuscripciones(): Promise<string> {
+  const ss = await db.suscripciones();
+  if (!ss.length) return 'No encontré pagos que se repitan cada mes. A medida que registres gastos los voy detectando.';
+  const total = ss.reduce((s, x) => s + x.monto, 0);
+  return `<b>🔁 Pagos que se repiten</b>\n${ss.map((x) => `• ${esc(x.concepto)}: ~${pesos(x.monto)}`).join('\n')}\n<b>~${pesos(total)} al mes.</b> ¿Todos los usas?`;
+}
+
+async function textoHormiga(): Promise<string> {
+  const hs = await db.gastosHormiga();
+  if (!hs.length) return 'Este mes no veo gastos hormiga (pequeños y repetidos). 👌';
+  const total = hs.reduce((s, x) => s + x.total, 0);
+  return `<b>🐜 Gastos hormiga del mes</b>\n${hs.map((x) => `• ${esc(x.concepto)}: ${x.veces} veces = ${pesos(x.total)}`).join('\n')}\n<b>Total: ${pesos(total)}</b>`;
+}
+
+/** Retiro (cuenta → efectivo) o consignación (efectivo → cuenta). */
+async function retiroOConsignacion(args: string, tipo: 'retiro' | 'consignacion'): Promise<string> {
+  const m = extraerMonto(args);
+  const efectivo = await db.cuentaEfectivo();
+  const cs = (await db.cuentas()).filter((c) => c.id !== efectivo.id);
+  const cuenta = m ? cuentaDelTexto(m.resto, cs) : null;
+  if (!m || !cuenta) {
+    const ej = tipo === 'retiro' ? '<code>retiré 100 mil de nequi</code>' : '<code>consigné 50 mil en bancolombia</code>';
+    return `Escríbelo así: ${ej}. Tus cuentas: ${cs.map((c) => esc(c.nombre)).join(', ') || 'ninguna todavía'}.`;
+  }
+  const [desde, hacia] = tipo === 'retiro' ? [cuenta.c, efectivo] : [efectivo, cuenta.c];
+  await db.transferir({ desdeId: desde.id, haciaId: hacia.id, monto: m.monto, nota: tipo === 'retiro' ? 'Retiro' : 'Consignación' });
+  const aviso = desde.saldo - m.monto < 0 ? `\n⚠️ ${esc(desde.nombre)} quedó en negativo: revisa su saldo con /saldo.` : '';
+  const mensaje = tipo === 'retiro'
+    ? `🏧 Retiraste ${pesos(m.monto)} de <b>${esc(desde.nombre)}</b> (${pesos(desde.saldo - m.monto)}). En efectivo tienes <b>${pesos(hacia.saldo + m.monto)}</b>.`
+    : `🏦 Consignaste ${pesos(m.monto)} en <b>${esc(hacia.nombre)}</b> (${pesos(hacia.saldo + m.monto)}). En efectivo te quedan <b>${pesos(desde.saldo - m.monto)}</b>.`;
+  return mensaje + aviso;
+}
+
+/**
+ * Envíos a otra persona por Nequi, Bancolombia, llave (Bre-B)…
+ * - Si te devolvió la plata en efectivo, es un cambio: cuenta → efectivo.
+ * - Si dice a qué otra cuenta tuya fue, es una transferencia (la maneja transferirCuentas).
+ * - Si no, es un gasto "Envío a <persona>" que sale de esa cuenta.
+ */
+async function envioAPersona(texto: string): Promise<string | null> {
+  const m = extraerMonto(texto);
+  if (!m) return null;
+  const cs = await db.cuentas();
+  const sinVerbo = texto.replace(/^(le\s+|les\s+)?\S+\s*/i, '');
+  const meDioEfectivo = /\bme\s+(dio|dieron|devolvi[oó]|entreg[oó]|pas[oó])\b|\ben\s+efectivo\b|\ba\s+cambio\b|\bcash\b/i.test(texto);
+
+  // La cuenta desde donde salió: "por nequi", "desde bancolombia", "con daviplata" (no el efectivo que te dieron)
+  const sinEfectivo = sinVerbo.replace(/\b(en\s+)?efectivo\b|\bcash\b/gi, ' ');
+  const origen = cuentaDelTexto(sinEfectivo, cs.filter((c) => c.banco !== 'efectivo'));
+  if (!origen) return null;
+
+  // ¿A quién? "a juan", "a mi mamá", "al arrendador"
+  const quien = (sinVerbo.match(/\b(?:a|al|para)\s+((?:mi\s+|la\s+|el\s+)?[\p{L}]+(?:\s+[\p{L}]+)?)/iu)?.[1] ?? '')
+    .replace(/\s+(por|desde|con|de|y|en)$/i, '')
+    .replace(/\s+(por|desde|con|de|y|en)\s+.*$/i, '')
+    .trim();
+  // Si "a quién" es otra cuenta tuya, es una transferencia entre tus cuentas.
+  const destino = quien ? cuentaDelTexto(quien, cs) : null;
+  if (destino) {
+    const resto = sinVerbo.replace(new RegExp(`\\b(a|al|para)\\s+${quien.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'), ' ');
+    const desde = cuentaDelTexto(resto, cs.filter((c) => c.id !== destino.c.id));
+    if (!desde) return null;
+    await db.transferir({ desdeId: desde.c.id, haciaId: destino.c.id, monto: m.monto });
+    return `🔁 Pasaste ${pesos(m.monto)} de <b>${esc(desde.c.nombre)}</b> (${pesos(desde.c.saldo - m.monto)}) a <b>${esc(destino.c.nombre)}</b> (${pesos(destino.c.saldo + m.monto)}).`;
+  }
+
+  if (meDioEfectivo) {
+    const efectivo = await db.cuentaEfectivo();
+    await db.transferir({ desdeId: origen.c.id, haciaId: efectivo.id, monto: m.monto, nota: quien ? `Cambio con ${quien}` : 'Cambio a efectivo' });
+    return `💱 Le mandaste ${pesos(m.monto)}${quien ? ` a ${esc(quien)}` : ''} por <b>${esc(origen.c.nombre)}</b> y te lo dieron en efectivo.\n${esc(origen.c.nombre)}: ${pesos(origen.c.saldo - m.monto)} · Efectivo: <b>${pesos(efectivo.saldo + m.monto)}</b>\nNo cuenta como gasto: solo cambiaste de bolsillo.`;
+  }
+
+  const via = /\b(llave|bre-?b)\b/i.test(texto) ? ' (llave)' : '';
+  const concepto = quien ? `Envío a ${quien}` : 'Envío';
+  await db.insertarGasto({ concepto, monto: m.monto, categoria: 'Otros', origen: 'telegram', texto, cuentaId: origen.c.id });
+  const r = await db.resumen();
+  return [
+    `📤 ${esc(concepto)}${via}: ${pesos(m.monto)}`,
+    `Salió de <b>${esc(origen.c.nombre)}</b> · saldo ${pesos(origen.c.saldo - m.monto)}`,
+    r.ingresos > 0 ? `Libre en el mes: ${pesos(r.disponible)}` : '',
+    `Si te lo van a devolver, cuando te paguen escríbeme: <code>me pagó ${esc(quien.replace(/^(mi|la|el)\s+/i, '') || 'juan')} ${Math.round(m.monto / 1000)} mil por ${esc(origen.c.nombre.toLowerCase())}</code>`,
+  ].filter(Boolean).join('\n');
 }

@@ -22,5 +22,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api/telegram|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api/telegram|api/cron|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon).*)'],
 };

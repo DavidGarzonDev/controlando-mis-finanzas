@@ -3,11 +3,16 @@
 import { revalidatePath } from 'next/cache';
 import * as db from '@/lib/datos';
 import { asegurarEsquema } from '@/lib/esquema';
-import { normalizarCategoria } from '@/lib/categorias';
+import { CATEGORIAS, normalizarCategoria } from '@/lib/categorias';
 
 const texto = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const entero = (fd: FormData, k: string) => Math.max(0, Math.round(Number(String(fd.get(k) ?? '').replace(/[^\d]/g, '')) || 0));
-const idDe = (fd: FormData) => Number(fd.get('id')) || null;
+const idDe = (fd: FormData, k = 'id') => Number(fd.get(k)) || null;
+/** Día del mes (1 a 31) o null. */
+const diaDe = (fd: FormData, k: string) => {
+  const d = Number(texto(fd, k));
+  return Number.isInteger(d) && d >= 1 && d <= 31 ? d : null;
+};
 /** Acabado ('negro', 'oro'…), color libre '#rrggbb' o null (colores del banco). */
 const colorDe = (fd: FormData) => {
   const c = texto(fd, 'color');
@@ -15,8 +20,18 @@ const colorDe = (fd: FormData) => {
 };
 const ultimos4De = (fd: FormData) => texto(fd, 'ultimos4').replace(/\D/g, '').slice(-4) || null;
 
+/** La cuenta elegida en el formulario; "efectivo" crea la cuenta de efectivo si no existe. */
+async function cuentaDe(fd: FormData): Promise<number | null> {
+  const v = texto(fd, 'cuenta');
+  if (v === 'efectivo') return (await db.cuentaEfectivo()).id;
+  return Number(v) || null;
+}
+
 async function listo() {
   await asegurarEsquema();
+}
+function refrescar() {
+  revalidatePath('/');
 }
 
 export async function guardarGasto(fd: FormData) {
@@ -25,20 +40,21 @@ export async function guardarGasto(fd: FormData) {
     concepto: texto(fd, 'concepto') || 'Gasto',
     monto: entero(fd, 'monto'),
     categoria: texto(fd, 'categoria') === 'Ajuste' ? 'Ajuste' : normalizarCategoria(texto(fd, 'categoria')) ?? 'Otros',
+    cuentaId: await cuentaDe(fd),
   };
   const id = idDe(fd);
   if (id) await db.actualizarGasto(id, datos);
   else await db.insertarGasto({ ...datos, origen: 'web' });
-  revalidatePath('/');
+  refrescar();
 }
 
 export async function guardarIngreso(fd: FormData) {
   await listo();
-  const datos = { concepto: texto(fd, 'concepto') || 'Ingreso', monto: entero(fd, 'monto') };
+  const datos = { concepto: texto(fd, 'concepto') || 'Ingreso', monto: entero(fd, 'monto'), cuentaId: await cuentaDe(fd) };
   const id = idDe(fd);
   if (id) await db.actualizarIngreso(id, datos);
   else await db.insertarIngreso(datos);
-  revalidatePath('/');
+  refrescar();
 }
 
 /** Cuadre: plata que aparece o desaparece sin que sepas en qué. Positivo = ingreso, negativo = gasto "Ajuste". */
@@ -47,12 +63,13 @@ export async function guardarAjuste(fd: FormData) {
   const monto = entero(fd, 'monto');
   if (!monto) return;
   const nota = texto(fd, 'nota');
+  const cuentaId = await cuentaDe(fd);
   if (texto(fd, 'signo') === 'mas') {
-    await db.insertarIngreso({ concepto: nota ? `Ajuste: ${nota}` : 'Ajuste', monto });
+    await db.insertarIngreso({ concepto: nota ? `Ajuste: ${nota}` : 'Ajuste', monto, cuentaId });
   } else {
-    await db.insertarGasto({ concepto: nota || 'Ajuste sin explicar', monto, categoria: 'Ajuste', origen: 'web' });
+    await db.insertarGasto({ concepto: nota || 'Ajuste sin explicar', monto, categoria: 'Ajuste', origen: 'web', cuentaId });
   }
-  revalidatePath('/');
+  refrescar();
 }
 
 export async function guardarDeuda(fd: FormData) {
@@ -70,22 +87,24 @@ export async function guardarDeuda(fd: FormData) {
     cuota: entero(fd, 'cuota'),
     tasa: texto(fd, 'tasa') || null,
     prioridad: entero(fd, 'prioridad') || 99,
+    diaPago: diaDe(fd, 'dia_pago'),
+    diaCorte: tipo === 'tarjeta' ? diaDe(fd, 'dia_corte') : null,
   });
-  revalidatePath('/');
+  refrescar();
 }
 
 export async function guardarFijo(fd: FormData) {
   await listo();
-  await db.guardarFijo(idDe(fd), { concepto: texto(fd, 'concepto') || 'Gasto fijo', monto: entero(fd, 'monto') });
-  revalidatePath('/');
+  await db.guardarFijo(idDe(fd), { concepto: texto(fd, 'concepto') || 'Gasto fijo', monto: entero(fd, 'monto'), diaPago: diaDe(fd, 'dia_pago') });
+  refrescar();
 }
 
 export async function registrarAbono(fd: FormData) {
   await listo();
   const id = idDe(fd);
   const monto = entero(fd, 'monto');
-  if (id && monto > 0) await db.abonarDeudaPorId(id, monto);
-  revalidatePath('/');
+  if (id && monto > 0) await db.abonarDeudaPorId(id, monto, await cuentaDe(fd), texto(fd, 'tipo_abono') === 'capital' ? 'capital' : 'cuota');
+  refrescar();
 }
 
 export async function registrarCompra(fd: FormData) {
@@ -95,7 +114,7 @@ export async function registrarCompra(fd: FormData) {
   if (id && monto > 0) {
     await db.registrarCompraCredito(id, { concepto: texto(fd, 'concepto') || 'Compra', monto, cuotas: entero(fd, 'cuotas') || 1 });
   }
-  revalidatePath('/');
+  refrescar();
 }
 
 export async function guardarCuenta(fd: FormData) {
@@ -108,21 +127,61 @@ export async function guardarCuenta(fd: FormData) {
     franquicia: texto(fd, 'franquicia') || null,
     color: colorDe(fd),
   });
-  revalidatePath('/');
+  refrescar();
 }
 
-export async function marcarFijo(id: number, pagado: boolean) {
+export async function transferir(fd: FormData) {
   await listo();
-  await db.marcarFijo(id, pagado);
-  revalidatePath('/');
+  // 'efectivo' en el formulario = la cuenta de efectivo (se crea si no existe)
+  const efectivo = texto(fd, 'desde') === 'efectivo' || texto(fd, 'hacia') === 'efectivo' ? (await db.cuentaEfectivo()).id : null;
+  // Nota: si "desde" y "hacia" terminan siendo la misma cuenta, no se hace nada.
+  const desdeId = texto(fd, 'desde') === 'efectivo' ? efectivo : idDe(fd, 'desde');
+  const haciaId = texto(fd, 'hacia') === 'efectivo' ? efectivo : idDe(fd, 'hacia');
+  const monto = entero(fd, 'monto');
+  if (monto > 0 && desdeId !== haciaId) await db.transferir({ desdeId, haciaId, monto, nota: texto(fd, 'nota') || null });
+  refrescar();
 }
 
-export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta', id: number) {
+export async function guardarTopes(fd: FormData) {
+  await listo();
+  for (const c of CATEGORIAS) await db.guardarTope(c, entero(fd, `tope_${c}`));
+  refrescar();
+}
+
+export async function guardarMeta(fd: FormData) {
+  await listo();
+  const fecha = texto(fd, 'fecha_meta');
+  await db.guardarMeta(idDe(fd), {
+    nombre: texto(fd, 'nombre') || 'Meta',
+    objetivo: entero(fd, 'objetivo'),
+    fechaMeta: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : null,
+    color: colorDe(fd),
+  });
+  refrescar();
+}
+
+export async function aportarMeta(fd: FormData) {
+  await listo();
+  const id = idDe(fd);
+  const monto = entero(fd, 'monto');
+  if (id && monto > 0) await db.aportarMeta(id, texto(fd, 'signo') === 'menos' ? -monto : monto);
+  refrescar();
+}
+
+export async function marcarFijo(id: number, pagado: boolean, mes?: string) {
+  await listo();
+  await db.marcarFijo(id, pagado, db.mesValido(mes));
+  refrescar();
+}
+
+export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia', id: number) {
   await listo();
   if (tipo === 'gasto') await db.borrarGasto(id);
   if (tipo === 'ingreso') await db.borrarIngreso(id);
   if (tipo === 'deuda') await db.borrarDeuda(id);
   if (tipo === 'fijo') await db.borrarFijo(id);
   if (tipo === 'cuenta') await db.borrarCuenta(id);
-  revalidatePath('/');
+  if (tipo === 'meta') await db.borrarMeta(id);
+  if (tipo === 'transferencia') await db.borrarTransferencia(id);
+  refrescar();
 }

@@ -1,8 +1,8 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { Nfc } from 'lucide-react';
-import { bancoPorId, estiloTarjeta, sello } from '@/lib/bancos';
+import { bancoPorId, estiloTarjeta, logoBanco, sello, type Banco } from '@/lib/bancos';
 
 /** Inclina la tarjeta siguiendo el dedo o el mouse, con un brillo que se mueve encima. */
 function inclinar(e: React.PointerEvent<HTMLElement>) {
@@ -18,6 +18,19 @@ function inclinar(e: React.PointerEvent<HTMLElement>) {
 function soltar(e: React.PointerEvent<HTMLElement>) {
   e.currentTarget.style.setProperty('--rx', '0deg');
   e.currentTarget.style.setProperty('--ry', '0deg');
+}
+
+/** El logo del banco sobre una placa blanca; si no carga, sus iniciales. */
+export function SelloBanco({ b, chico }: { b: Banco; chico?: boolean }) {
+  const [falla, setFalla] = useState(false);
+  const url = logoBanco(b);
+  if (!url || falla) return <span className={`tarjeta-sello${chico ? ' chico' : ''}`} aria-hidden>{sello(b)}</span>;
+  return (
+    <span className={`tarjeta-sello logo${chico ? ' chico' : ''}`} aria-hidden>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFalla(true)} />
+    </span>
+  );
 }
 
 /** El chip EMV, dibujado con sus contactos. */
@@ -78,7 +91,7 @@ export function Plastico({ d, clase, arriba, centro, mini }: {
     >
       <span className="tarjeta-cab">
         <span className="tarjeta-marca">
-          <span className="tarjeta-sello" aria-hidden>{sello(b)}</span>
+          <SelloBanco b={b} chico={mini} />
           <span className="tarjeta-banco">{nombreBanco}</span>
         </span>
         {arriba ?? <Nfc size={mini ? 18 : 22} aria-hidden className="tarjeta-nfc-mini" />}

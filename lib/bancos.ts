@@ -1,51 +1,60 @@
 /**
- * Bancos y emisores de tarjetas en Colombia. Los colores son aproximados, solo para reconocer
- * la tarjeta de un vistazo en la billetera; no se usan logos ni marcas gráficas.
+ * Bancos y emisores de tarjetas en Colombia. Los colores son aproximados, para reconocer la tarjeta de un vistazo.
+ * Los logos no se guardan aquí: se cargan en el navegador desde el sitio de cada banco (ver logoBanco).
  */
 export type Banco = {
   id: string; nombre: string; alias: string[]; fondo: [string, string]; tinta: string; acento: string;
-  /** Iniciales para el sello de la tarjeta (sin usar logos). */
+  /** Iniciales de respaldo si el logo no carga. */
   sello?: string;
+  /** Dominio del banco: el logo se carga en el navegador desde su sitio (no se guarda en el repositorio). */
+  dominio?: string;
 };
 
+/** URL del logo (ícono del sitio del banco), o null si no tiene. */
+export function logoBanco(b: Banco): string | null {
+  return b.dominio ? `https://www.google.com/s2/favicons?domain=${b.dominio}&sz=128` : null;
+}
+
 export const BANCOS: Banco[] = [
-  { id: 'bancolombia', nombre: 'Bancolombia', alias: ['bancolombia'], fondo: ['#2b2b2b', '#121212'], tinta: '#ffffff', acento: '#fdda24' },
-  { id: 'davivienda', nombre: 'Davivienda', alias: ['davivienda'], fondo: ['#e1251b', '#9e0f0a'], tinta: '#ffffff', acento: '#ffd1cc' },
-  { id: 'bbva', nombre: 'BBVA', alias: ['bbva'], fondo: ['#1464a5', '#072146'], tinta: '#ffffff', acento: '#5bbeff' },
-  { id: 'bogota', nombre: 'Banco de Bogotá', alias: ['banco de bogota'], fondo: ['#1a4a9c', '#0b2559'], tinta: '#ffffff', acento: '#9cc2ff' },
-  { id: 'avvillas', nombre: 'AV Villas', alias: ['av villas', 'avvillas', 'villas'], fondo: ['#0b5bb5', '#063574'], tinta: '#ffffff', acento: '#ff5a5f' },
-  { id: 'occidente', nombre: 'Banco de Occidente', alias: ['banco de occidente', 'occidente'], fondo: ['#0a63b0', '#043d6f'], tinta: '#ffffff', acento: '#7fd0ff' },
-  { id: 'popular', nombre: 'Banco Popular', alias: ['banco popular'], fondo: ['#0f8a4b', '#065a2f'], tinta: '#ffffff', acento: '#b7f5cf' },
-  { id: 'cajasocial', nombre: 'Banco Caja Social', alias: ['caja social'], fondo: ['#0b5ea8', '#063a69'], tinta: '#ffffff', acento: '#ffc94d' },
-  { id: 'agrario', nombre: 'Banco Agrario', alias: ['banco agrario', 'agrario'], fondo: ['#2e8b3a', '#185e22'], tinta: '#ffffff', acento: '#e6f56a' },
-  { id: 'colpatria', nombre: 'Scotiabank Colpatria', alias: ['scotiabank colpatria', 'colpatria', 'scotiabank', 'scotia'], fondo: ['#e3242b', '#8f0d12'], tinta: '#ffffff', acento: '#ffffff' },
-  { id: 'itau', nombre: 'Itaú', alias: ['itau'], fondo: ['#f07c00', '#b85300'], tinta: '#ffffff', acento: '#003399' },
-  { id: 'falabella', nombre: 'Banco Falabella', alias: ['falabella', 'cmr'], fondo: ['#4a9a2c', '#2b6418'], tinta: '#ffffff', acento: '#d9f2c9' },
-  { id: 'nu', nombre: 'Nu', alias: ['nubank', 'nu'], fondo: ['#8a19d6', '#530a8a'], tinta: '#ffffff', acento: '#e7c6ff' },
-  { id: 'rappi', nombre: 'RappiCard', alias: ['rappicard', 'rappi'], fondo: ['#ff5233', '#c0300f'], tinta: '#ffffff', acento: '#fff1ec' },
-  { id: 'lulo', nombre: 'Lulo Bank', alias: ['lulo bank', 'lulo'], fondo: ['#2a2a2a', '#0f0f0f'], tinta: '#ffffff', acento: '#c8ff3c' },
-  { id: 'serfinanza', nombre: 'Serfinanza', alias: ['serfinanza', 'olimpica'], fondo: ['#00498f', '#002a55'], tinta: '#ffffff', acento: '#ffd23f' },
-  { id: 'exito', nombre: 'Tarjeta Éxito', alias: ['tarjeta exito', 'tuya'], fondo: ['#f5c400', '#c99c00'], tinta: '#1a1a1a', acento: '#1a1a1a' },
+  { id: 'bancolombia', dominio: 'bancolombia.com', nombre: 'Bancolombia', alias: ['bancolombia'], fondo: ['#2b2b2b', '#121212'], tinta: '#ffffff', acento: '#fdda24' },
+  { id: 'davivienda', dominio: 'davivienda.com', nombre: 'Davivienda', alias: ['davivienda'], fondo: ['#e1251b', '#9e0f0a'], tinta: '#ffffff', acento: '#ffd1cc' },
+  { id: 'bbva', dominio: 'bbva.com.co', nombre: 'BBVA', alias: ['bbva'], fondo: ['#1464a5', '#072146'], tinta: '#ffffff', acento: '#5bbeff' },
+  { id: 'bogota', dominio: 'bancodebogota.com', nombre: 'Banco de Bogotá', alias: ['banco de bogota'], fondo: ['#1a4a9c', '#0b2559'], tinta: '#ffffff', acento: '#9cc2ff' },
+  { id: 'avvillas', dominio: 'avvillas.com.co', nombre: 'AV Villas', alias: ['av villas', 'avvillas', 'villas'], fondo: ['#0b5bb5', '#063574'], tinta: '#ffffff', acento: '#ff5a5f' },
+  { id: 'occidente', dominio: 'bancodeoccidente.com.co', nombre: 'Banco de Occidente', alias: ['banco de occidente', 'occidente'], fondo: ['#0a63b0', '#043d6f'], tinta: '#ffffff', acento: '#7fd0ff' },
+  { id: 'popular', dominio: 'bancopopular.com.co', nombre: 'Banco Popular', alias: ['banco popular'], fondo: ['#0f8a4b', '#065a2f'], tinta: '#ffffff', acento: '#b7f5cf' },
+  { id: 'cajasocial', dominio: 'bancocajasocial.com', nombre: 'Banco Caja Social', alias: ['caja social'], fondo: ['#0b5ea8', '#063a69'], tinta: '#ffffff', acento: '#ffc94d' },
+  { id: 'agrario', dominio: 'bancoagrario.gov.co', nombre: 'Banco Agrario', alias: ['banco agrario', 'agrario'], fondo: ['#2e8b3a', '#185e22'], tinta: '#ffffff', acento: '#e6f56a' },
+  { id: 'colpatria', dominio: 'scotiabankcolpatria.com', nombre: 'Scotiabank Colpatria', alias: ['scotiabank colpatria', 'colpatria', 'scotiabank', 'scotia'], fondo: ['#e3242b', '#8f0d12'], tinta: '#ffffff', acento: '#ffffff' },
+  { id: 'itau', dominio: 'itau.co', nombre: 'Itaú', alias: ['itau'], fondo: ['#f07c00', '#b85300'], tinta: '#ffffff', acento: '#003399' },
+  { id: 'falabella', dominio: 'bancofalabella.com.co', nombre: 'Banco Falabella', alias: ['falabella', 'cmr'], fondo: ['#4a9a2c', '#2b6418'], tinta: '#ffffff', acento: '#d9f2c9' },
+  { id: 'nu', dominio: 'nu.com.co', nombre: 'Nu', alias: ['nubank', 'nu'], fondo: ['#8a19d6', '#530a8a'], tinta: '#ffffff', acento: '#e7c6ff' },
+  { id: 'rappi', dominio: 'rappicard.co', nombre: 'RappiCard', alias: ['rappicard', 'rappi'], fondo: ['#ff5233', '#c0300f'], tinta: '#ffffff', acento: '#fff1ec' },
+  { id: 'lulo', dominio: 'lulobank.com', nombre: 'Lulo Bank', alias: ['lulo bank', 'lulo'], fondo: ['#2a2a2a', '#0f0f0f'], tinta: '#ffffff', acento: '#c8ff3c' },
+  { id: 'serfinanza', dominio: 'bancoserfinanza.com', nombre: 'Serfinanza', alias: ['serfinanza', 'olimpica'], fondo: ['#00498f', '#002a55'], tinta: '#ffffff', acento: '#ffd23f' },
+  { id: 'exito', dominio: 'tuya.com.co', nombre: 'Tarjeta Éxito', alias: ['tarjeta exito', 'tuya'], fondo: ['#f5c400', '#c99c00'], tinta: '#1a1a1a', acento: '#1a1a1a' },
+  // Efectivo (la plata física también es una "cuenta")
+  { id: 'efectivo', nombre: 'Efectivo', alias: ['efectivo', 'cash', 'billetera fisica'], fondo: ['#2f8f5b', '#17573a'], tinta: '#ffffff', acento: '#c9f2d9', sello: '$' },
   // Billeteras y bancos digitales
-  { id: 'nequi', nombre: 'Nequi', alias: ['nequi'], fondo: ['#2c0b3f', '#14041f'], tinta: '#ffffff', acento: '#e3218b', sello: 'N' },
-  { id: 'daviplata', nombre: 'Daviplata', alias: ['daviplata'], fondo: ['#e30613', '#8e0a10'], tinta: '#ffffff', acento: '#ffd5d7', sello: 'DP' },
-  { id: 'dale', nombre: 'Dale!', alias: ['dale'], fondo: ['#00a3e0', '#006a94'], tinta: '#ffffff', acento: '#ffe14d', sello: 'D!' },
-  { id: 'movii', nombre: 'Movii', alias: ['movii'], fondo: ['#7f2fd1', '#4b178a'], tinta: '#ffffff', acento: '#9df5d9', sello: 'M' },
-  { id: 'uala', nombre: 'Ualá', alias: ['uala'], fondo: ['#3e6bfd', '#1f3fb8'], tinta: '#ffffff', acento: '#c9d6ff', sello: 'U' },
-  { id: 'pibank', nombre: 'Pibank', alias: ['pibank'], fondo: ['#ff6a00', '#c24a00'], tinta: '#ffffff', acento: '#ffe1cc', sello: 'Pi' },
-  { id: 'global66', nombre: 'Global66', alias: ['global66', 'global 66'], fondo: ['#1f2b5a', '#0e1533'], tinta: '#ffffff', acento: '#3ce0b7', sello: 'G66' },
+  { id: 'nequi', dominio: 'nequi.com.co', nombre: 'Nequi', alias: ['nequi'], fondo: ['#2c0b3f', '#14041f'], tinta: '#ffffff', acento: '#e3218b', sello: 'N' },
+  { id: 'daviplata', dominio: 'daviplata.com', nombre: 'Daviplata', alias: ['daviplata'], fondo: ['#e30613', '#8e0a10'], tinta: '#ffffff', acento: '#ffd5d7', sello: 'DP' },
+  { id: 'dale', dominio: 'dale.com.co', nombre: 'Dale!', alias: ['dale'], fondo: ['#00a3e0', '#006a94'], tinta: '#ffffff', acento: '#ffe14d', sello: 'D!' },
+  { id: 'movii', dominio: 'movii.com.co', nombre: 'Movii', alias: ['movii'], fondo: ['#7f2fd1', '#4b178a'], tinta: '#ffffff', acento: '#9df5d9', sello: 'M' },
+  { id: 'uala', dominio: 'uala.com.co', nombre: 'Ualá', alias: ['uala'], fondo: ['#3e6bfd', '#1f3fb8'], tinta: '#ffffff', acento: '#c9d6ff', sello: 'U' },
+  { id: 'pibank', dominio: 'pibank.co', nombre: 'Pibank', alias: ['pibank'], fondo: ['#ff6a00', '#c24a00'], tinta: '#ffffff', acento: '#ffe1cc', sello: 'Pi' },
+  { id: 'global66', dominio: 'global66.com', nombre: 'Global66', alias: ['global66', 'global 66'], fondo: ['#1f2b5a', '#0e1533'], tinta: '#ffffff', acento: '#3ce0b7', sello: 'G66' },
   // Otros bancos
-  { id: 'gnb', nombre: 'GNB Sudameris', alias: ['gnb', 'sudameris'], fondo: ['#00539f', '#00305e'], tinta: '#ffffff', acento: '#9fd0ff', sello: 'GNB' },
-  { id: 'pichincha', nombre: 'Banco Pichincha', alias: ['pichincha'], fondo: ['#f2c500', '#b99600'], tinta: '#1a1a1a', acento: '#0a2e6b', sello: 'P' },
-  { id: 'finandina', nombre: 'Finandina', alias: ['finandina'], fondo: ['#00a19a', '#006862'], tinta: '#ffffff', acento: '#d0f5f2', sello: 'F' },
-  { id: 'mibanco', nombre: 'Mibanco', alias: ['mibanco'], fondo: ['#00924a', '#005d2f'], tinta: '#ffffff', acento: '#ffd200', sello: 'MB' },
-  { id: 'bancamia', nombre: 'Bancamía', alias: ['bancamia'], fondo: ['#e5007e', '#9c0056'], tinta: '#ffffff', acento: '#ffd1ea', sello: 'BM' },
-  { id: 'bancow', nombre: 'Banco W', alias: ['banco w'], fondo: ['#5c2d91', '#391a5c'], tinta: '#ffffff', acento: '#f5b300', sello: 'W' },
-  { id: 'coopcentral', nombre: 'Coopcentral', alias: ['coopcentral'], fondo: ['#009640', '#005e28'], tinta: '#ffffff', acento: '#c7f2d6', sello: 'CC' },
-  { id: 'codensa', nombre: 'Crédito Fácil Codensa', alias: ['codensa', 'credito facil'], fondo: ['#ec1c24', '#9c0f14'], tinta: '#ffffff', acento: '#ffffff', sello: 'CF' },
+  { id: 'gnb', dominio: 'gnbsudameris.com.co', nombre: 'GNB Sudameris', alias: ['gnb', 'sudameris'], fondo: ['#00539f', '#00305e'], tinta: '#ffffff', acento: '#9fd0ff', sello: 'GNB' },
+  { id: 'pichincha', dominio: 'bancopichincha.com.co', nombre: 'Banco Pichincha', alias: ['pichincha'], fondo: ['#f2c500', '#b99600'], tinta: '#1a1a1a', acento: '#0a2e6b', sello: 'P' },
+  { id: 'finandina', dominio: 'bancofinandina.com', nombre: 'Finandina', alias: ['finandina'], fondo: ['#00a19a', '#006862'], tinta: '#ffffff', acento: '#d0f5f2', sello: 'F' },
+  { id: 'mibanco', dominio: 'mibanco.com.co', nombre: 'Mibanco', alias: ['mibanco'], fondo: ['#00924a', '#005d2f'], tinta: '#ffffff', acento: '#ffd200', sello: 'MB' },
+  { id: 'bancamia', dominio: 'bancamia.com.co', nombre: 'Bancamía', alias: ['bancamia'], fondo: ['#e5007e', '#9c0056'], tinta: '#ffffff', acento: '#ffd1ea', sello: 'BM' },
+  { id: 'bancow', dominio: 'bancow.com.co', nombre: 'Banco W', alias: ['banco w'], fondo: ['#5c2d91', '#391a5c'], tinta: '#ffffff', acento: '#f5b300', sello: 'W' },
+  { id: 'coopcentral', dominio: 'coopcentral.com.co', nombre: 'Coopcentral', alias: ['coopcentral'], fondo: ['#009640', '#005e28'], tinta: '#ffffff', acento: '#c7f2d6', sello: 'CC' },
+  { id: 'codensa', dominio: 'enel.com.co', nombre: 'Crédito Fácil Codensa', alias: ['codensa', 'credito facil'], fondo: ['#ec1c24', '#9c0f14'], tinta: '#ffffff', acento: '#ffffff', sello: 'CF' },
   // Créditos sin tarjeta
-  { id: 'addi', nombre: 'Addi', alias: ['addi'], fondo: ['#2c5bff', '#1636b8'], tinta: '#ffffff', acento: '#c4d2ff', sello: 'A' },
-  { id: 'sistecredito', nombre: 'Sistecrédito', alias: ['sistecredito'], fondo: ['#ff7a00', '#c45c00'], tinta: '#ffffff', acento: '#fff0e0', sello: 'S' },
+  { id: 'addi', dominio: 'addi.com', nombre: 'Addi', alias: ['addi'], fondo: ['#2c5bff', '#1636b8'], tinta: '#ffffff', acento: '#c4d2ff', sello: 'A' },
+  { id: 'sistecredito', dominio: 'sistecredito.com', nombre: 'Sistecrédito', alias: ['sistecredito'], fondo: ['#ff7a00', '#c45c00'], tinta: '#ffffff', acento: '#fff0e0', sello: 'S' },
   { id: 'otro', nombre: 'Otro banco', alias: [], fondo: ['#3d4659', '#1c2230'], tinta: '#ffffff', acento: '#c9d2e6' },
 ];
 

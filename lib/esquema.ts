@@ -40,6 +40,32 @@ const SENTENCIAS = [
     fijo_id INTEGER NOT NULL REFERENCES fijos(id) ON DELETE CASCADE, mes TEXT NOT NULL,
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (fijo_id, mes))`,
   `CREATE TABLE IF NOT EXISTS palabras (palabra TEXT PRIMARY KEY, categoria TEXT NOT NULL)`,
+  // De qué cuenta sale o entra cada movimiento
+  `ALTER TABLE gastos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
+  `ALTER TABLE ingresos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
+  `ALTER TABLE abonos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
+  // 'cuota' (pago normal del mes) o 'capital' (abono extra a capital)
+  `ALTER TABLE abonos ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'cuota'`,
+  `CREATE TABLE IF NOT EXISTS transferencias (
+    id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
+    desde_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL, hacia_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL,
+    monto INTEGER NOT NULL CHECK (monto > 0), nota TEXT)`,
+  // Fechas de pago y de corte
+  `ALTER TABLE fijos ADD COLUMN IF NOT EXISTS dia_pago INTEGER`,
+  `ALTER TABLE deudas ADD COLUMN IF NOT EXISTS dia_pago INTEGER`,
+  `ALTER TABLE deudas ADD COLUMN IF NOT EXISTS dia_corte INTEGER`,
+  // Topes por categoría y metas de ahorro
+  `CREATE TABLE IF NOT EXISTS presupuestos (categoria TEXT PRIMARY KEY, monto INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS metas (
+    id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, objetivo INTEGER NOT NULL DEFAULT 0,
+    fecha_meta DATE, color TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `CREATE TABLE IF NOT EXISTS aportes_meta (
+    id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta_id INTEGER NOT NULL REFERENCES metas(id) ON DELETE CASCADE, monto INTEGER NOT NULL)`,
+  // Foto diaria de lo que tienes y lo que debes
+  `CREATE TABLE IF NOT EXISTS patrimonio_diario (fecha DATE PRIMARY KEY, activos INTEGER NOT NULL, deudas INTEGER NOT NULL)`,
+  // Para no mandar el mismo recordatorio dos veces el mismo día
+  `CREATE TABLE IF NOT EXISTS recordatorios_enviados (fecha DATE PRIMARY KEY, enviado TIMESTAMPTZ NOT NULL DEFAULT now())`,
 ];
 
 let listo: Promise<void> | null = null;

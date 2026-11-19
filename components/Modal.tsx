@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { X } from 'lucide-react';
-import { borrar, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, registrarAbono, registrarCompra } from '@/app/actions';
+import { Banknote, X } from 'lucide-react';
+import {
+  aportarMeta, borrar, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, guardarMeta, guardarTopes,
+  registrarAbono, registrarCompra, transferir,
+} from '@/app/actions';
 import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
 import { CATEGORIAS } from '@/lib/categorias';
-import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, TipoCredito } from '@/lib/datos';
+import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, Meta, Resumen, TipoCredito, Transferencia } from '@/lib/datos';
 import { COLOR_CAT, ICONO_CAT, pesos } from './util';
-import { Plastico } from './Plastico';
+import { Plastico, SelloBanco } from './Plastico';
 
 export type Editor =
   | { tipo: 'nuevo'; modo: Modo }
@@ -18,13 +21,20 @@ export type Editor =
   | { tipo: 'fijo'; item?: Fijo }
   | { tipo: 'abono'; item: Deuda }
   | { tipo: 'compra'; item: Deuda }
-  | { tipo: 'cuenta'; item?: Cuenta };
+  | { tipo: 'cuenta'; item?: Cuenta }
+  | { tipo: 'topes' }
+  | { tipo: 'meta'; item?: Meta }
+  | { tipo: 'aporte'; item: Meta }
+  | { tipo: 'transferir'; modo?: 'transferir' | 'retiro' | 'consignacion'; desde?: number }
+  | { tipo: 'verTransferencia'; item: Transferencia; de: string; a: string };
 
 type Modo = 'gasto' | 'ingreso' | 'ajuste';
 
 const FUENTES = ['Quincena', 'Efectivo', 'Trabajo extra', 'Venta', 'Me enviaron', 'Préstamo'];
 
-export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () => void; avisar: (msg: string) => void }) {
+export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
+  editor: Editor; cuentas: Cuenta[]; metas: Meta[]; r: Resumen; cerrar: () => void; avisar: (msg: string) => void;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   const [modo, setModo] = useState<Modo>(editor.tipo === 'nuevo' ? editor.modo : 'gasto');
   const [confirmar, setConfirmar] = useState(false);
@@ -36,8 +46,8 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
   }, []);
 
   const tipo = editor.tipo === 'nuevo' ? modo : editor.tipo;
-  const item = 'item' in editor ? (editor.item as (Gasto & Ingreso & Deuda & Fijo & Cuenta) | undefined) : undefined;
-  const esEdicion = editor.tipo !== 'nuevo' && editor.tipo !== 'abono' && editor.tipo !== 'compra' && !!item?.id;
+  const item = 'item' in editor ? (editor.item as (Gasto & Ingreso & Deuda & Fijo & Cuenta & Meta) | undefined) : undefined;
+  const esEdicion = ['gasto', 'ingreso', 'deuda', 'fijo', 'cuenta', 'meta', 'verTransferencia'].includes(editor.tipo) && !!item?.id;
   const [tipoCredito, setTipoCredito] = useState<TipoCredito>(item?.tipo ?? (editor.tipo === 'deuda' ? editor.nuevoTipo : undefined) ?? 'tarjeta');
 
   const titulo = {
@@ -49,9 +59,15 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
     fijo: esEdicion ? 'Editar gasto fijo' : 'Nuevo gasto fijo',
     abono: `Pagar ${item?.nombre ?? ''}`,
     ajuste: 'Registrar',
+    topes: 'Topes del mes',
+    meta: esEdicion ? `Editar ${item?.nombre ?? 'meta'}` : 'Nueva meta de ahorro',
+    aporte: item?.nombre ?? 'Aportar',
+    transferir: editor.tipo === 'transferir' && editor.modo === 'retiro' ? 'Retirar a efectivo' : editor.tipo === 'transferir' && editor.modo === 'consignacion' ? 'Consignar efectivo' : 'Mover plata entre cuentas',
+    verTransferencia: 'Movimiento entre cuentas',
   }[tipo];
 
-  const accion = { gasto: guardarGasto, ingreso: guardarIngreso, deuda: guardarDeuda, fijo: guardarFijo, abono: registrarAbono, ajuste: guardarAjuste, compra: registrarCompra, cuenta: guardarCuenta }[tipo];
+  const accion = { gasto: guardarGasto, ingreso: guardarIngreso, deuda: guardarDeuda, fijo: guardarFijo, abono: registrarAbono, ajuste: guardarAjuste, compra: registrarCompra, cuenta: guardarCuenta,
+    topes: guardarTopes, meta: guardarMeta, aporte: aportarMeta, transferir, verTransferencia: async () => {} }[tipo];
   const mensaje = {
     gasto: esEdicion ? 'Gasto actualizado' : 'Gasto registrado',
     ingreso: esEdicion ? 'Ingreso actualizado' : 'Ingreso registrado',
@@ -61,6 +77,11 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
     fijo: esEdicion ? 'Gasto fijo actualizado' : 'Gasto fijo agregado',
     abono: 'Pago registrado',
     ajuste: 'Ajuste registrado',
+    topes: 'Topes guardados',
+    meta: esEdicion ? 'Meta actualizada' : 'Meta creada',
+    aporte: 'Listo',
+    transferir: 'Movimiento registrado',
+    verTransferencia: '',
   }[tipo];
 
   /** Al elegir el banco, pone su nombre si el campo está vacío o tenía otro banco. */
@@ -86,7 +107,7 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
     if (!confirmar) return setConfirmar(true);
     setBorrando(true);
     try {
-      await borrar(tipo as 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta', item!.id);
+      await borrar((tipo === 'verTransferencia' ? 'transferencia' : tipo) as 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia', item!.id);
       avisar('Eliminado');
       ref.current?.close();
     } catch {
@@ -136,6 +157,7 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
           <>
             <Campo label="Monto"><Monto name="monto" defaultValue={item?.monto} autoFocus /></Campo>
             <Campo label="¿En qué?"><input name="concepto" required defaultValue={item?.concepto} placeholder="Almuerzo" autoComplete="off" /></Campo>
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿Con qué pagaste?" defecto={item?.cuentaId ?? null} />
             {item?.categoria === 'Ajuste' ? (
               <input type="hidden" name="categoria" value="Ajuste" />
             ) : (
@@ -155,14 +177,57 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
           </>
         )}
 
-        {tipo === 'ingreso' && <FormIngreso item={item} />}
+        {tipo === 'ingreso' && (
+          <>
+            <FormIngreso item={item} />
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿A dónde entró?" defecto={item?.cuentaId ?? null} />
+          </>
+        )}
 
-        {tipo === 'ajuste' && <FormAjuste />}
+        {tipo === 'ajuste' && (
+          <>
+            <FormAjuste />
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿En qué cuenta?" defecto={null} />
+          </>
+        )}
+
+        {tipo === 'topes' && <FormTopes r={r} />}
+
+        {tipo === 'meta' && (
+          <>
+            <Campo label="¿Para qué ahorras?"><input name="nombre" required defaultValue={item?.nombre} placeholder="Fondo de emergencia" autoFocus autoComplete="off" /></Campo>
+            <div className="fila2">
+              <Campo label="¿Cuánto necesitas?"><Monto name="objetivo" defaultValue={item?.objetivo} /></Campo>
+              <Campo label="¿Para cuándo?" ayuda="Opcional">
+                <input name="fecha_meta" type="date" defaultValue={item?.fechaMeta ?? ''} />
+              </Campo>
+            </div>
+            <p className="nota">Consejo: un fondo de emergencia de 3 meses de gastos fijos te salva de endeudarte cuando algo se daña.</p>
+          </>
+        )}
+
+        {tipo === 'aporte' && item && <FormAporte meta={item} />}
+
+        {tipo === 'transferir' && editor.tipo === 'transferir' && (
+          <FormTransferir cuentas={cuentas} modo={editor.modo ?? 'transferir'} desde={editor.desde} />
+        )}
+
+        {tipo === 'verTransferencia' && editor.tipo === 'verTransferencia' && (
+          <p className="nota">
+            <b className="num">{pesos(editor.item.monto)}</b> de <b>{editor.de}</b> a <b>{editor.a}</b>
+            {editor.item.nota ? ` · ${editor.item.nota}` : ''}. Si lo eliminas, los saldos de las dos cuentas vuelven a como estaban.
+          </p>
+        )}
 
         {tipo === 'fijo' && (
           <>
             <Campo label="¿Qué pagas cada mes?"><input name="concepto" required defaultValue={item?.concepto} placeholder="Gimnasio" autoFocus autoComplete="off" /></Campo>
-            <Campo label="Monto al mes"><Monto name="monto" defaultValue={item?.monto} /></Campo>
+            <div className="fila2">
+              <Campo label="Monto al mes"><Monto name="monto" defaultValue={item?.monto} /></Campo>
+              <Campo label="Día de pago" ayuda="Te aviso un día antes">
+                <input name="dia_pago" type="number" min={1} max={31} inputMode="numeric" defaultValue={item?.diaPago ?? ''} placeholder="5" />
+              </Campo>
+            </div>
           </>
         )}
 
@@ -206,6 +271,16 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
                 <input name="prioridad" type="number" min={1} inputMode="numeric" defaultValue={item?.prioridad && item.prioridad < 99 ? item.prioridad : ''} placeholder="1" />
               </Campo>
             </div>
+            <div className="fila2">
+              <Campo label="Día de pago de la cuota" ayuda="Te aviso un día antes">
+                <input name="dia_pago" type="number" min={1} max={31} inputMode="numeric" defaultValue={item?.diaPago ?? ''} placeholder="10" />
+              </Campo>
+              {tipoCredito === 'tarjeta' && (
+                <Campo label="Día de corte" ayuda="Cuando cierra el extracto">
+                  <input name="dia_corte" type="number" min={1} max={31} inputMode="numeric" defaultValue={item?.diaCorte ?? ''} placeholder="25" />
+                </Campo>
+              )}
+            </div>
           </>
         )}
 
@@ -225,7 +300,8 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
               Saldo actual <b className="num">{pesos(item.saldo)}</b>
               {faltaCuota > 0 ? <> · falta <b className="num">{pesos(faltaCuota)}</b> de la cuota de este mes</> : <> · la cuota de este mes ya está cubierta</>}
             </p>
-            <Campo label="¿Cuánto abonaste?"><Monto name="monto" defaultValue={faltaCuota || undefined} autoFocus /></Campo>
+            <FormAbono faltaCuota={faltaCuota} saldo={item.saldo} />
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿De qué cuenta salió?" defecto={null} />
           </>
         )}
 
@@ -233,7 +309,7 @@ export function Modal({ editor, cerrar, avisar }: { editor: Editor; cerrar: () =
 
         <div className="modal-acciones">
           <button type="button" className="btn" onClick={() => ref.current?.close()}>Cancelar</button>
-          <Guardar texto={tipo === 'abono' ? 'Registrar abono' : 'Guardar'} />
+          {tipo !== 'verTransferencia' && <Guardar texto={tipo === 'abono' ? 'Registrar pago' : tipo === 'aporte' ? 'Guardar' : 'Guardar'} />}
         </div>
         {esEdicion && (
           <button type="button" className={confirmar ? 'btn peligro lleno' : 'btn peligro'} onClick={eliminar} disabled={borrando}>
@@ -329,6 +405,118 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
           {color === 'banco' ? `Colores de ${bancoPorId(banco).nombre}` : libre ? 'Color personalizado' : ACABADOS.find((a) => a.id === color)?.nombre}
         </small>
       </fieldset>
+    </>
+  );
+}
+
+/** Elige de qué cuenta sale o a cuál entra la plata. "Efectivo" se crea solo si no existe. */
+function SelectorCuenta({ cuentas, etiqueta, defecto }: { cuentas: Cuenta[]; etiqueta: string; defecto: number | null }) {
+  const tieneEfectivo = cuentas.some((c) => c.banco === 'efectivo');
+  const [valor, setValor] = useState<string>(defecto ? String(defecto) : '');
+  return (
+    <fieldset className="cuentas-sel">
+      <legend>{etiqueta}</legend>
+      <input type="hidden" name="cuenta" value={valor} />
+      <button type="button" className={valor === '' ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === ''} onClick={() => setValor('')}>
+        Sin especificar
+      </button>
+      {cuentas.map((c) => (
+        <button type="button" key={c.id} className={valor === String(c.id) ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === String(c.id)} onClick={() => setValor(String(c.id))}>
+          <SelloBanco b={bancoPorId(c.banco)} chico /> {c.nombre}
+        </button>
+      ))}
+      {!tieneEfectivo && (
+        <button type="button" className={valor === 'efectivo' ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === 'efectivo'} onClick={() => setValor('efectivo')}>
+          <Banknote size={16} aria-hidden /> Efectivo
+        </button>
+      )}
+    </fieldset>
+  );
+}
+
+function FormAbono({ faltaCuota, saldo }: { faltaCuota: number; saldo: number }) {
+  const [tipo, setTipo] = useState<'cuota' | 'capital'>(faltaCuota > 0 ? 'cuota' : 'capital');
+  return (
+    <>
+      <div className="segmento" role="radiogroup" aria-label="Tipo de pago">
+        {(['cuota', 'capital'] as const).map((t) => (
+          <label key={t} className={tipo === t ? 'on' : ''}>
+            <input type="radio" name="tipo_abono" value={t} checked={tipo === t} onChange={() => setTipo(t)} />
+            {t === 'cuota' ? 'Cuota del mes' : 'Abono a capital'}
+          </label>
+        ))}
+      </div>
+      <Campo label={tipo === 'cuota' ? '¿Cuánto pagaste?' : '¿Cuánto abonaste a capital?'}>
+        <Monto name="monto" defaultValue={tipo === 'cuota' ? faltaCuota || undefined : undefined} autoFocus key={tipo} />
+      </Campo>
+      {tipo === 'capital' && (
+        <p className="nota">El abono a capital baja la deuda (hoy {pesos(saldo)}) y los intereses que pagas. No cuenta como la cuota del mes.</p>
+      )}
+    </>
+  );
+}
+
+function FormTopes({ r }: { r: Resumen }) {
+  return (
+    <>
+      <p className="nota">Deja en blanco las categorías sin tope. Al lado ves cuánto llevas este mes.</p>
+      <div className="topes-form">
+        {CATEGORIAS.map((c) => {
+          const Icono = ICONO_CAT[c];
+          const usado = r.porCategoria.find((x) => x.categoria === c)?.total ?? 0;
+          return (
+            <label key={c} className="tope-campo" style={{ '--c': COLOR_CAT[c] } as React.CSSProperties}>
+              <span className="tope-campo-cab"><span className="cat-ico"><Icono size={16} aria-hidden /></span> {c}<small>lleva {pesos(usado)}</small></span>
+              <Monto name={`tope_${c}`} defaultValue={r.topes[c]} opcional />
+            </label>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function FormAporte({ meta }: { meta: Meta }) {
+  const [signo, setSigno] = useState<'mas' | 'menos'>('mas');
+  const pct = meta.objetivo ? Math.min(100, Math.round((meta.ahorrado / meta.objetivo) * 100)) : 0;
+  return (
+    <>
+      <p className="nota">Llevas <b className="num">{pesos(meta.ahorrado)}</b> de <b className="num">{pesos(meta.objetivo)}</b> ({pct} %).</p>
+      <div className="segmento" role="radiogroup" aria-label="Aportar o retirar">
+        {(['mas', 'menos'] as const).map((v) => (
+          <label key={v} className={signo === v ? 'on' : ''}>
+            <input type="radio" name="signo" value={v} checked={signo === v} onChange={() => setSigno(v)} />
+            {v === 'mas' ? '+ Aportar' : '− Sacar'}
+          </label>
+        ))}
+      </div>
+      <Campo label={signo === 'mas' ? '¿Cuánto apartas?' : '¿Cuánto sacas?'}><Monto name="monto" autoFocus /></Campo>
+    </>
+  );
+}
+
+function FormTransferir({ cuentas, modo, desde }: { cuentas: Cuenta[]; modo: 'transferir' | 'retiro' | 'consignacion'; desde?: number }) {
+  const efectivo = cuentas.find((c) => c.banco === 'efectivo');
+  const bancos = cuentas.filter((c) => c.banco !== 'efectivo');
+  const valorEfectivo = efectivo ? String(efectivo.id) : 'efectivo';
+  const [de, setDe] = useState(modo === 'consignacion' ? valorEfectivo : String(desde ?? bancos[0]?.id ?? ''));
+  const [a, setA] = useState(modo === 'retiro' ? valorEfectivo : String(bancos.find((c) => String(c.id) !== String(desde ?? bancos[0]?.id))?.id ?? valorEfectivo));
+  const opciones = (
+    <>
+      {bancos.map((c) => <option key={c.id} value={c.id}>{c.nombre} · {pesos(c.saldo)}</option>)}
+      <option value={valorEfectivo}>Efectivo{efectivo ? ` · ${pesos(efectivo.saldo)}` : ''}</option>
+    </>
+  );
+  return (
+    <>
+      <Campo label="Monto"><Monto name="monto" autoFocus /></Campo>
+      <div className="fila2">
+        <Campo label="Desde"><select name="desde" value={de} onChange={(e) => setDe(e.target.value)}>{opciones}</select></Campo>
+        <Campo label="Hacia"><select name="hacia" value={a} onChange={(e) => setA(e.target.value)}>{opciones}</select></Campo>
+      </div>
+      {de === a && <p className="error">Elige dos cuentas distintas.</p>}
+      <Campo label="Nota (opcional)"><input name="nota" placeholder={modo === 'retiro' ? 'Retiro en cajero' : 'Pasé para pagar…'} autoComplete="off" /></Campo>
+      <p className="nota">No cuenta como gasto: la plata solo cambia de bolsillo.</p>
     </>
   );
 }

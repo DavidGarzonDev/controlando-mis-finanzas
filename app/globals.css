@@ -1154,3 +1154,142 @@ select:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px v
 .colores-nombre { width: 100%; color: var(--tinta-3); font-size: 0.8rem; }
 
 @media (max-width: 599px) { .solo-ancho { display: none; } }
+
+/* Logo del banco sobre una placa blanca, como un sticker en el plástico */
+.tarjeta-sello.logo { background: #fff; padding: 4px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.25); }
+.tarjeta-sello.logo img { width: 100%; height: 100%; object-fit: contain; border-radius: 4px; display: block; }
+.tarjeta-sello.logo { width: 34px; min-width: 34px; }
+.tarjeta-sello.logo.chico { width: 28px; min-width: 28px; height: 28px; }
+
+/* ======================================================================
+   Meses, plan, metas, topes, cuentas y patrimonio
+   ====================================================================== */
+
+.selector-mes { display: inline-flex; align-items: center; gap: 2px; margin-left: -6px; }
+.selector-mes a, .selector-mes .off {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: var(--tinta-2);
+}
+.selector-mes a:hover { background: var(--papel-2); color: var(--azul); }
+.selector-mes .off { opacity: 0.3; }
+.selector-mes-texto { color: var(--tinta-3); font-size: 0.85rem; min-width: 7.5em; text-align: center; }
+.selector-mes-texto::first-letter { text-transform: uppercase; }
+.aviso-mes {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--ambar-suave);
+  color: var(--tinta);
+  font-size: 0.9rem;
+}
+.aviso-mes a { color: var(--azul); font-weight: 650; }
+
+.proyeccion {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--m-tinta) 12%, transparent);
+  font-size: 0.86rem;
+}
+
+.ico-titulo { vertical-align: -3px; margin-right: 4px; color: var(--azul); }
+.plan > section { display: grid; gap: 12px; }
+.plan > section + section { margin-top: 18px; }
+.mini-titulo { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--tinta-3); text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 2px; }
+
+/* Metas */
+.metas, .metas-mini, .topes { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 900px) { .metas { grid-template-columns: 1fr 1fr; } }
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--papel);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  animation: subir 0.45s var(--curva) both;
+}
+.meta.lista { border-color: color-mix(in srgb, var(--verde) 50%, var(--linea)); }
+.meta-anillo { position: relative; flex: none; width: 58px; height: 58px; padding: 0; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
+.meta-anillo svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.meta-anillo span { font-size: 0.78rem; font-weight: 800; }
+.anillo-fondo { fill: none; stroke: var(--papel-2); stroke-width: 5; }
+.anillo-valor { fill: none; stroke: var(--azul); stroke-width: 5; stroke-linecap: round; transition: stroke-dasharray 0.9s var(--curva); }
+.meta.lista .anillo-valor { stroke: var(--verde); }
+@starting-style { .anillo-valor { stroke-dasharray: 0 100 !important; } }
+.meta-info { flex: 1; min-width: 0; }
+.meta-nombre { font-weight: 700; }
+.meta-cifras { color: var(--tinta-2); font-size: 0.9rem; }
+.meta-cifras b { color: var(--tinta); }
+.meta-mini { display: grid; gap: 6px; width: 100%; padding: 8px 2px; border: 0; background: none; text-align: left; cursor: pointer; border-radius: 8px; }
+.meta-mini:hover { background: var(--papel-2); }
+.meta-mini-cab { display: flex; justify-content: space-between; gap: 8px; }
+
+/* Topes */
+.tope { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; background: var(--papel); border: 1px solid var(--linea); border-radius: var(--radio); }
+.tope-info { flex: 1; display: grid; gap: 6px; }
+.tope-cab { display: flex; justify-content: space-between; gap: 8px; }
+.tope-cab small { color: var(--tinta-3); font-weight: 500; }
+.tope.medio .cupo-barra span { background: var(--ambar); }
+.tope.alto .cupo-barra span { background: var(--rojo); }
+.tope.bajo .cupo-barra span { background: var(--c); }
+.cats li { position: relative; }
+.cat-tope { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--rojo); }
+
+.topes-form { display: grid; gap: 10px; }
+@media (min-width: 520px) { .topes-form { grid-template-columns: 1fr 1fr; } }
+.tope-campo { display: grid; gap: 6px; }
+.tope-campo-cab { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 0.88rem; }
+.tope-campo-cab small { margin-left: auto; color: var(--tinta-3); font-weight: 500; }
+.tope-campo .cat-ico { width: 26px; height: 26px; border-radius: 8px; }
+.tope-campo .monto input { font-size: 1.1rem; }
+.tope-campo .monto span { font-size: 1rem; }
+
+/* Selector de cuenta en los formularios */
+.cuentas-sel { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.cuentas-sel legend { font-size: 0.84rem; font-weight: 650; color: var(--tinta-2); margin-bottom: 8px; padding: 0; }
+.cuenta-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--linea-fuerte);
+  background: var(--papel);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--tinta-2);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+.cuenta-op:first-of-type { padding-left: 12px; }
+.cuenta-op .tarjeta-sello.chico { width: 22px; min-width: 22px; height: 22px; font-size: 0.6rem; border-radius: 6px; }
+.cuenta-op.on { background: var(--tinta); border-color: var(--tinta); color: var(--papel); }
+
+/* Movimientos */
+.buscar {
+  flex: 1;
+  min-width: 140px;
+  font: 500 15px/1.3 var(--fuente);
+  color: var(--tinta);
+  background: var(--papel);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+.buscar:focus { outline: none; border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-suave); }
+a.btn { text-decoration: none; color: inherit; }
+
+/* Billetera */
+.acciones-cuentas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
+.patrimonio-cifra { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+.grafica .grid.cero { stroke: var(--linea-fuerte); }
+.fechas-tarjeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; color: var(--tinta-2); font-size: 0.9rem; }
+.fechas-tarjeta svg { color: var(--azul); }
+.intereses { font-size: 0.86rem; color: var(--tinta-2); padding: 10px 12px; border-radius: 10px; background: var(--ambar-suave); }
+.bloque-lista { background: var(--papel); border: 1px solid var(--linea); border-radius: var(--radio); padding: 4px 14px; }

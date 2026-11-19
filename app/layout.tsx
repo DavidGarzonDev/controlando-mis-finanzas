@@ -4,6 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Mis Finanzas',
   description: 'Gastos, deudas e ingresos del mes',
+  appleWebApp: { capable: true, title: 'Finanzas', statusBarStyle: 'black-translucent' },
 };
 
 export const viewport: Viewport = {

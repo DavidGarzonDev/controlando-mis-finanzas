@@ -233,3 +233,70 @@ export function BarrasHistorial({ historial }: { historial: MesHistorial[] }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Patrimonio en el tiempo: lo que tienes menos lo que debes
+
+export function CurvaPatrimonio({ puntos }: { puntos: { fecha: string; activos: number; deudas: number }[] }) {
+  const [ref, ancho] = useAncho<HTMLDivElement>();
+  const [foco, setFoco] = useState<number | null>(null);
+  const valores = puntos.map((p) => p.activos - p.deudas);
+  const min = Math.min(0, ...valores);
+  const max = Math.max(0, ...valores);
+  const { paso } = escala(Math.max(Math.abs(min), Math.abs(max)) * 1.1 || 100_000);
+  const bajo = Math.floor(min / paso) * paso;
+  const alto = Math.ceil(max / paso) * paso || paso;
+
+  const altoSvg = 170;
+  const m = { t: 10, r: 10, b: 24, l: 64 };
+  const w = Math.max(ancho - m.l - m.r, 10);
+  const h = altoSvg - m.t - m.b;
+  const x = (i: number) => m.l + (puntos.length > 1 ? (i / (puntos.length - 1)) * w : w / 2);
+  const y = (v: number) => m.t + h - ((v - bajo) / (alto - bajo || 1)) * h;
+  const linea = `M${valores.map((v, i) => `${x(i)},${y(v)}`).join('L')}`;
+  const area = `${linea}L${x(valores.length - 1)},${y(Math.max(bajo, 0))}L${x(0)},${y(Math.max(bajo, 0))}Z`;
+  const lineas: number[] = [];
+  for (let v = bajo; v <= alto; v += paso) lineas.push(v);
+  const fechaCorta = (f: string) => `${Number(f.slice(8, 10))} ${mesCortoDe(Number(f.slice(5, 7)))}`;
+  const etiquetas = [0, Math.floor((puntos.length - 1) / 2), puntos.length - 1].filter((v, i, a) => a.indexOf(v) === i);
+  const sel = foco !== null ? puntos[foco] : null;
+
+  function mover(e: React.PointerEvent<SVGSVGElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const i = Math.round(((e.clientX - r.left - m.l) / w) * (puntos.length - 1));
+    setFoco(Math.min(Math.max(i, 0), puntos.length - 1));
+  }
+
+  return (
+    <div className="grafica" ref={ref}>
+      <svg width={ancho} height={altoSvg} role="img" aria-label={`Patrimonio: ${pesos(valores[valores.length - 1] ?? 0)} hoy`} onPointerMove={mover} onPointerLeave={() => setFoco(null)}>
+        {lineas.map((v) => (
+          <g key={v}>
+            <line className={v === 0 ? 'grid cero' : 'grid'} x1={m.l} x2={m.l + w} y1={y(v)} y2={y(v)} />
+            <text className="eje" x={m.l - 8} y={y(v)} dy="0.32em" textAnchor="end">{v === 0 ? '$0' : pesosCorto(v)}</text>
+          </g>
+        ))}
+        {etiquetas.map((i) => (
+          <text key={i} className="eje" x={x(i)} y={altoSvg - 6} textAnchor={i === 0 ? 'start' : i === puntos.length - 1 ? 'end' : 'middle'}>{fechaCorta(puntos[i].fecha)}</text>
+        ))}
+        <path className="area" d={area} />
+        <path className="real" d={linea} pathLength={1} />
+        <circle className="punto" cx={x(valores.length - 1)} cy={y(valores[valores.length - 1])} r={4.5} />
+        {foco !== null && (
+          <g className="mira">
+            <line x1={x(foco)} x2={x(foco)} y1={m.t} y2={m.t + h} />
+            <circle className="punto" cx={x(foco)} cy={y(valores[foco])} r={4.5} />
+          </g>
+        )}
+      </svg>
+      {sel && foco !== null && (
+        <div className="tip" style={{ left: Math.min(Math.max(x(foco), 90), ancho - 90) }}>
+          <b>{fechaCorta(sel.fecha)}</b>
+          <span>Tienes: {pesos(sel.activos)}</span>
+          <span>Debes: {pesos(sel.deudas)}</span>
+          <span>Patrimonio: {pesos(sel.activos - sel.deudas)}</span>
+        </div>
+      )}
+    </div>
+  );
+}

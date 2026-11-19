@@ -1,4 +1,4 @@
-import type { Deuda, Fijo, Resumen } from './datos';
+import type { Deuda, Fijo, Hormiga, Meta, Resumen, Suscripcion } from './datos';
 
 export type Nivel = 'alerta' | 'aviso' | 'idea' | 'bien';
 export type Consejo = { id: string; nivel: Nivel; titulo: string; texto: string };
@@ -36,7 +36,12 @@ function mesDentroDe(meses: number) {
 const ORDEN: Record<Nivel, number> = { alerta: 0, aviso: 1, idea: 2, bien: 3 };
 
 /** Recomendaciones con reglas simples sobre tus números. No usa IA. */
-export function generarConsejos(r: Resumen, deudas: Deuda[], fijos: Fijo[]): Consejo[] {
+export function generarConsejos(
+  r: Resumen,
+  deudas: Deuda[],
+  fijos: Fijo[],
+  extra: { metas?: Meta[]; hormiga?: Hormiga[]; suscripciones?: Suscripcion[] } = {},
+): Consejo[] {
   const out: Consejo[] = [];
   const activas = deudas.filter((d) => d.saldo > 0);
   const pago = r.proximoPago;
@@ -56,7 +61,7 @@ export function generarConsejos(r: Resumen, deudas: Deuda[], fijos: Fijo[]): Con
   }
 
   // --- El ritmo de gasto ---
-  if (r.ingresos > 0 && r.disponible > 0 && r.ritmo7 > 0) {
+  if (r.esActual && r.ingresos > 0 && r.disponible > 0 && r.ritmo7 > 0) {
     const limite = r.presupuestoHoy;
     if (r.ritmo7 > limite * 1.15) {
       const diasQueAlcanza = Math.floor(r.disponible / r.ritmo7);
@@ -71,15 +76,44 @@ export function generarConsejos(r: Resumen, deudas: Deuda[], fijos: Fijo[]): Con
       });
     }
   }
-  if (r.gastadoHoy > r.presupuestoHoy && r.presupuestoHoy > 0) {
+  if (r.esActual && r.gastadoHoy > r.presupuestoHoy && r.presupuestoHoy > 0) {
     out.push({
       id: 'hoy', nivel: 'aviso', titulo: 'Hoy ya te pasaste del límite',
       texto: `Llevas ${pesos(r.gastadoHoy)} y el límite de hoy era ${pesos(r.presupuestoHoy)}. Mañana el límite baja para compensar.`,
     });
   }
 
+  // --- Proyección de fin de mes ---
+  if (r.proyeccion && r.ingresos > 0 && r.diasMes - r.diaHoy >= 3) {
+    const { finDeMes, ingresoEsperado } = r.proyeccion;
+    if (finDeMes < 0) {
+      out.push({
+        id: 'proyeccion', nivel: finDeMes + ingresoEsperado < 0 ? 'alerta' : 'aviso',
+        titulo: `A este ritmo terminas el mes en ${pesos(finDeMes)}`,
+        texto: ingresoEsperado > 0
+          ? `Si te entra lo de siempre (unos ${pesos(ingresoEsperado)} más), cerrarías en ${pesos(finDeMes + ingresoEsperado)}. Baja el gasto diario para no depender de eso.`
+          : `Gastas ${pesos(r.ritmo7)} por día. Bajar un poco el ritmo los días que quedan te deja en verde.`,
+      });
+    } else if (finDeMes > 50_000 && r.esActual) {
+      out.push({
+        id: 'proyeccion', nivel: 'bien', titulo: `Vas para terminar el mes con ${pesos(finDeMes)} libres`,
+        texto: 'Decide desde ya a dónde va: un abono a capital de tu deuda más cara o tu fondo de emergencia.',
+      });
+    }
+  }
+
+  // --- Topes por categoría ---
+  for (const [cat, tope] of Object.entries(r.topes)) {
+    const usado = r.porCategoria.find((c) => c.categoria === cat)?.total ?? 0;
+    if (usado > tope) {
+      out.push({ id: `tope-${cat}`, nivel: 'alerta', titulo: `Te pasaste del tope de ${cat}`, texto: `Llevas ${pesos(usado)} y el tope del mes es ${pesos(tope)}.` });
+    } else if (usado >= tope * 0.8 && r.esActual) {
+      out.push({ id: `tope-${cat}`, nivel: 'aviso', titulo: `${cat}: vas en ${Math.round((usado / tope) * 100)} % del tope`, texto: `Te quedan ${pesos(tope - usado)} para lo que queda del mes.` });
+    }
+  }
+
   // --- Pagos pendientes ---
-  if (r.pendientes.length) {
+  if (r.pendientes.length && r.esActual) {
     const nombres = r.pendientes.slice(0, 4).map((p) => p.nombre).join(', ');
     const sobra = r.disponible + r.totalPendiente; // lo que hay antes de pagar lo pendiente
     out.push({
@@ -87,6 +121,37 @@ export function generarConsejos(r: Resumen, deudas: Deuda[], fijos: Fijo[]): Con
       titulo: `Aparta ${pesos(r.totalPendiente)} para lo que falta pagar`,
       texto: `Te falta: ${nombres}${r.pendientes.length > 4 ? ' y más' : ''}. Apenas te paguen, separa esa plata en otro bolsillo para que no se mezcle con la del día a día.`,
     });
+  }
+
+  // --- Gastos hormiga y suscripciones ---
+  const hormigaTotal = (extra.hormiga ?? []).reduce((s, h) => s + h.total, 0);
+  if (hormigaTotal >= 30_000) {
+    const h = extra.hormiga![0];
+    out.push({
+      id: 'hormiga', nivel: 'idea', titulo: `Gastos hormiga: ${pesos(hormigaTotal)} este mes`,
+      texto: `Solo en ${h.concepto.toLowerCase()} van ${h.veces} veces (${pesos(h.total)}). Son pequeños, pero juntos pesan.`,
+    });
+  }
+  const subs = extra.suscripciones ?? [];
+  if (subs.length >= 2) {
+    const total = subs.reduce((s, x) => s + x.monto, 0);
+    out.push({
+      id: 'suscripciones', nivel: 'idea', titulo: `Tienes ${subs.length} pagos que se repiten (~${pesos(total)}/mes)`,
+      texto: `${subs.slice(0, 4).map((x) => x.concepto).join(', ')}. Revisa si de verdad usas todos.`,
+    });
+  }
+
+  // --- Metas ---
+  for (const m of extra.metas ?? []) {
+    if (!m.fechaMeta || m.ahorrado >= m.objetivo) continue;
+    const meses = Math.max(1, Math.round((new Date(`${m.fechaMeta}T12:00:00`).getTime() - Date.now()) / (30.4 * 86_400_000)));
+    const porMes = Math.ceil((m.objetivo - m.ahorrado) / meses / 1000) * 1000;
+    if (r.esActual && m.aportadoMes < porMes) {
+      out.push({
+        id: `meta-${m.id}`, nivel: 'idea', titulo: `${m.nombre}: aparta ${pesos(porMes)} al mes`,
+        texto: `Te faltan ${pesos(m.objetivo - m.ahorrado)} y quedan ${meses} ${meses === 1 ? 'mes' : 'meses'}. Este mes llevas ${pesos(m.aportadoMes)}.`,
+      });
+    }
   }
 
   // --- Categorías ---
