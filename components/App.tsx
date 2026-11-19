@@ -86,7 +86,8 @@ export default function App(p: Props) {
       <div className="franja-colombia" aria-hidden />
       <header className="barra">
         <div className="marca">
-          <span className="marca-sello" aria-hidden><i /><i /><i /></span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="marca-logo" src="/logo-192.png" alt="" width={44} height={44} />
           <div>
             <h1>Mis Finanzas</h1>
             <SelectorMes mes={p.mes} meses={p.meses} tab={tab} />

@@ -13,7 +13,11 @@
 | `--q0…--q5` | Calendario: un solo tono de claro a oscuro |
 | `--co-amarillo/azul/rojo` | Solo la franja y el sello de la bandera |
 
-Tarjetas de la billetera: colores aproximados de cada banco (`lib/bancos.ts`) con un sello de iniciales. **No se usan logos de bancos** (son marcas registradas).
+Tarjetas de la billetera: colores aproximados de cada banco (`lib/bancos.ts`), o el color que elija el usuario. Los logos de los bancos **no se guardan en el repositorio**: se cargan en el navegador desde el sitio de cada banco, con las iniciales como respaldo.
+
+## Logo
+
+La billetera con la bandera y el recibo (`public/logo-*.png`, `app/icon.png`, `app/apple-icon.png`, `app/favicon.ico`). Va en el encabezado, la pestaña del navegador y el ícono al instalar la app.
 
 ## Tipografía
 
