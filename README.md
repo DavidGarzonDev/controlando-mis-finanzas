@@ -92,6 +92,7 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 | `tengo 300 mil en efectivo` / `me mandaron 50 mil` / `vendí la bici 200 mil` | También son ingresos, vengan de donde vengan |
 | `/ajuste -20000 no sé en qué` / `/ajuste +5000` | Cuadra la plata cuando lo registrado no coincide con lo real |
 | `/hoy` | Cuánto puedes gastar hoy y lo que llevas |
+| `/intereses` | Cuánto pagarás en intereses si sigues igual, y cuánto te ahorras abonando a capital |
 | `/resumen` | Cómo vas este mes y en qué se va la plata |
 | `/consejos` | Recomendaciones con tus números (sin IA) |
 | `/cat Salidas` | Corrige la categoría del último gasto y aprende la palabra |
@@ -109,7 +110,9 @@ Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no pue
 | `le mandé 50 mil a mi mamá por llave desde bancolombia` | Envío a otra persona (gasto) |
 | `/saldo nequi 250000` / `/saldo` | Corrige el saldo de una cuenta / ver todas |
 
-La primera vez que mencionas el efectivo, se crea solo.
+La primera vez que mencionas el efectivo, se crea solo. Marca una cuenta como **principal** (en Billetera → la cuenta → "Cuenta principal"): los gastos e ingresos que registres sin decir la cuenta salen de (o entran a) esa, y así los saldos siempre están al día.
+
+**¿Cómo se calcula "libre"?** Si tienes cuentas registradas: lo que tienes en cuentas y efectivo, menos lo que te falta pagar este mes (cuotas y fijos sin marcar), menos lo apartado en metas. "Hoy puedes gastar" es eso dividido entre los días que faltan para tu próximo pago. Sin cuentas registradas, se usa el balance del mes (ingresos menos cuotas, fijos y gastos).
 
 ### Tarjetas y créditos
 

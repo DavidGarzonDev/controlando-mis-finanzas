@@ -3,7 +3,7 @@ import type { Deuda, Fijo, Hormiga, Meta, Resumen, Suscripcion } from './datos';
 export type Nivel = 'alerta' | 'aviso' | 'idea' | 'bien';
 export type Consejo = { id: string; nivel: Nivel; titulo: string; texto: string };
 
-const pesos = (v: number) => '$' + Math.round(v).toLocaleString('es-CO');
+const pesos = (v: number) => (v < 0 ? '−$' : '$') + Math.abs(Math.round(v)).toLocaleString('es-CO');
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 /** Tasa mensual (0.025 = 2,5 %) a partir de lo que escribió el usuario: "35.9% E.A.", "2,1% M.V.", "~28-29% E.A.". */
@@ -24,6 +24,34 @@ export function mesesParaPagar(saldo: number, cuota: number, r: number | null): 
   if (!r) return Math.ceil(saldo / cuota);
   if (cuota <= saldo * r) return Infinity;
   return Math.ceil(-Math.log(1 - (r * saldo) / cuota) / Math.log(1 + r));
+}
+
+export type Simulacion = { meses: number; intereses: number; totalPagado: number };
+
+/**
+ * Simula el pago mes a mes: cada mes se suman los intereses del saldo y se resta la cuota (+ abono extra).
+ * `abonoHoy` es un abono a capital que se hace ya, antes del primer mes.
+ * Devuelve null si con esa cuota la deuda nunca se termina (la cuota no cubre ni los intereses).
+ */
+export function simularPago(saldo: number, cuota: number, r: number | null, extraMensual = 0, abonoHoy = 0): Simulacion | null {
+  let s = Math.max(0, saldo - abonoHoy);
+  const pago = cuota + extraMensual;
+  if (s <= 0) return { meses: 0, intereses: 0, totalPagado: Math.min(abonoHoy, saldo) };
+  if (pago <= 0) return null;
+  const tasa = r ?? 0;
+  if (pago <= s * tasa) return null;
+  let intereses = 0;
+  let total = Math.min(abonoHoy, saldo);
+  for (let mes = 1; mes <= 600; mes++) {
+    const interes = s * tasa;
+    intereses += interes;
+    s += interes;
+    const pagoMes = Math.min(pago, s);
+    total += pagoMes;
+    s -= pagoMes;
+    if (s <= 0.5) return { meses: mes, intereses: Math.round(intereses), totalPagado: Math.round(total) };
+  }
+  return null;
 }
 
 function mesDentroDe(meses: number) {
@@ -48,20 +76,23 @@ export function generarConsejos(
   const fechaPago = `el ${pago.dia}`;
 
   // --- El mes en general ---
-  if (r.ingresos === 0) {
+  const conBase = r.modo === 'cuentas' || r.ingresos > 0;
+  if (!conBase) {
     out.push({
       id: 'sin-ingresos', nivel: 'idea', titulo: 'Registra lo que te entra',
       texto: 'Sin ingresos registrados no puedo calcular cuánto te alcanza. Escríbele al bot “me pagaron 1.100.000” o “tengo 300 mil en efectivo”.',
     });
   } else if (r.disponible < 0) {
     out.push({
-      id: 'sobregiro', nivel: 'alerta', titulo: `Vas ${pesos(-r.disponible)} por encima`,
-      texto: 'Tus cuotas, fijos y gastos de este mes ya superan lo que te ha entrado. Frena los gastos que no sean necesarios hasta el próximo pago.',
+      id: 'sobregiro', nivel: 'alerta', titulo: `Te faltan ${pesos(-r.disponible)}`,
+      texto: r.modo === 'cuentas'
+        ? 'Lo que tienes en tus cuentas no alcanza para lo que te falta pagar este mes. Prioriza las cuotas y frena lo que no sea necesario hasta el próximo pago.'
+        : 'Tus cuotas, fijos y gastos de este mes ya superan lo que te ha entrado. Frena los gastos que no sean necesarios hasta el próximo pago.',
     });
   }
 
   // --- El ritmo de gasto ---
-  if (r.esActual && r.ingresos > 0 && r.disponible > 0 && r.ritmo7 > 0) {
+  if (r.esActual && conBase && r.disponible > 0 && r.ritmo7 > 0) {
     const limite = r.presupuestoHoy;
     if (r.ritmo7 > limite * 1.15) {
       const diasQueAlcanza = Math.floor(r.disponible / r.ritmo7);
@@ -84,7 +115,7 @@ export function generarConsejos(
   }
 
   // --- Proyección de fin de mes ---
-  if (r.proyeccion && r.ingresos > 0 && r.diasMes - r.diaHoy >= 3) {
+  if (r.proyeccion && conBase && r.diasMes - r.diaHoy >= 3) {
     const { finDeMes, ingresoEsperado } = r.proyeccion;
     if (finDeMes < 0) {
       out.push({
@@ -117,7 +148,7 @@ export function generarConsejos(
     const nombres = r.pendientes.slice(0, 4).map((p) => p.nombre).join(', ');
     const sobra = r.disponible + r.totalPendiente; // lo que hay antes de pagar lo pendiente
     out.push({
-      id: 'pendientes', nivel: r.ingresos > 0 && sobra < r.totalPendiente ? 'alerta' : 'aviso',
+      id: 'pendientes', nivel: conBase && sobra < r.totalPendiente ? 'alerta' : 'aviso',
       titulo: `Aparta ${pesos(r.totalPendiente)} para lo que falta pagar`,
       texto: `Te falta: ${nombres}${r.pendientes.length > 4 ? ' y más' : ''}. Apenas te paguen, separa esa plata en otro bolsillo para que no se mezcle con la del día a día.`,
     });
@@ -213,6 +244,26 @@ export function generarConsejos(
       });
     }
   }
+  // --- Cuánto se va en intereses y cuánto se ahorra abonando a capital ---
+  let interesesTotal = 0;
+  for (const d of activas) {
+    const sim = simularPago(d.saldo, d.cuotaBase || d.cuota, tasaMensual(d.tasa));
+    if (sim) interesesTotal += sim.intereses;
+  }
+  const objetivo = activas.map((d) => ({ d, r: tasaMensual(d.tasa) })).filter((x) => x.r).sort((a, b) => b.r! - a.r!)[0];
+  if (objetivo && interesesTotal >= 50_000) {
+    const cuota = objetivo.d.cuotaBase || objetivo.d.cuota;
+    const extra = Math.max(20_000, Math.round((cuota * 0.5) / 10_000) * 10_000);
+    const base = simularPago(objetivo.d.saldo, cuota, objetivo.r);
+    const conExtra = simularPago(objetivo.d.saldo, cuota, objetivo.r, extra);
+    if (base && conExtra && base.intereses - conExtra.intereses >= 10_000) {
+      out.push({
+        id: 'intereses', nivel: 'idea', titulo: `Si sigues igual pagarás ${pesos(interesesTotal)} en intereses`,
+        texto: `Abonando ${pesos(extra)} extra al mes a capital de ${objetivo.d.nombre} te ahorras ${pesos(base.intereses - conExtra.intereses)} y terminas ${base.meses - conExtra.meses} meses antes.`,
+      });
+    }
+  }
+
   const pagadas = deudas.filter((d) => d.saldo === 0 && d.cuota > 0);
   if (pagadas.length && activas.length) {
     const liberado = pagadas.reduce((s, d) => s + d.cuota, 0);

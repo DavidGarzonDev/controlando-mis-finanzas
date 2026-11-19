@@ -5,7 +5,7 @@ import { marcarCuota } from '@/app/actions';
 import { Contador } from './animacion';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, CalendarClock, Check, HandCoins, Landmark, Plus, ShoppingCart, TrendingUp } from 'lucide-react';
 import { Plastico } from './Plastico';
-import { mesDentroDe, planDeudas, tasaMensual } from '@/lib/consejos';
+import { mesDentroDe, planDeudas, simularPago, tasaMensual } from '@/lib/consejos';
 import { CurvaPatrimonio } from './graficas';
 import type { Cuenta, Deuda, MovCredito, PuntoPatrimonio, Resumen } from '@/lib/datos';
 import type { Editor } from './Modal';
@@ -64,7 +64,7 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
         <button className="btn chico" onClick={() => abrir({ tipo: 'transferir', modo: 'retiro' })}><ArrowUpFromLine size={16} aria-hidden /> Retirar</button>
         <button className="btn chico" onClick={() => abrir({ tipo: 'transferir', modo: 'consignacion' })}><ArrowDownToLine size={16} aria-hidden /> Consignar</button>
         {!cuentas.some((c) => c.banco === 'efectivo') && (
-          <button className="btn chico" onClick={() => abrir({ tipo: 'cuenta', item: { id: 0, nombre: 'Efectivo', banco: 'efectivo', saldo: 0, ultimos4: null, franquicia: 'Otra', color: null, actualizado: '' } })}>
+          <button className="btn chico" onClick={() => abrir({ tipo: 'cuenta', item: { id: 0, nombre: 'Efectivo', banco: 'efectivo', saldo: 0, ultimos4: null, franquicia: 'Otra', color: null, actualizado: '', principal: false } })}>
             <Banknote size={16} aria-hidden /> Agregar efectivo
           </button>
         )}
@@ -124,6 +124,7 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
               <Fechas d={elegida} />
               <EstadoCuota d={elegida} />
               <Intereses d={elegida} />
+              <SimuladorAbonos d={elegida} abrir={abrir} />
               <div className="tarjeta-acciones">
                 <button className="btn" onClick={() => abrir({ tipo: 'compra', item: elegida })}><ShoppingCart size={18} aria-hidden /> Compra</button>
                 <button className="btn primario" onClick={() => abrir({ tipo: 'abono', item: elegida })}><HandCoins size={18} aria-hidden /> Pagar</button>
@@ -180,6 +181,7 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
                       <span className="sub">{Math.round(pagado * 100)} % pagado</span>
                       <EstadoCuota d={d} boton abrir={abrir} />
                     </div>
+                    <SimuladorAbonos d={d} abrir={abrir} />
                   </>
                 )}
               </li>
@@ -247,6 +249,76 @@ function Fechas({ d }: { d: Deuda }) {
 }
 
 /** Cuánto pagarías de intereses el próximo mes si solo pagas la cuota, frente a pagar el total. */
+const ABONOS_UNICOS = [100_000, 200_000, 500_000, 1_000_000];
+
+/**
+ * Cuánto pagarías en intereses si sigues con la misma cuota, y cuánto te ahorras con abonos a capital.
+ * Sirve para animarte a abonar: el ahorro se ve en pesos y en meses.
+ */
+function SimuladorAbonos({ d, abrir }: { d: Deuda; abrir: (e: Editor) => void }) {
+  const r = tasaMensual(d.tasa);
+  const cuota = d.cuotaBase || d.cuota;
+  const [extra, setExtra] = useState(0);
+  const [unico, setUnico] = useState(0);
+  if (d.saldo <= 0) return null;
+  if (!r) {
+    return <p className="sub sim-sin-tasa">Agrega la tasa de interés (en Editar) para ver cuánto pagarías en intereses y cuánto te ahorras abonando a capital.</p>;
+  }
+  const base = simularPago(d.saldo, cuota, r);
+  if (!base) {
+    return (
+      <div className="simulador alerta">
+        <p><b>Con una cuota de {pesos(cuota)} esta deuda nunca se termina:</b> no alcanza ni para los intereses (~{pesos(d.saldo * r)} al mes). Súbele la cuota o abona a capital.</p>
+      </div>
+    );
+  }
+  const nueva = extra || unico ? simularPago(d.saldo, cuota, r, extra, unico) : null;
+  const ahorro = nueva ? base.intereses - nueva.intereses : 0;
+  const mesesMenos = nueva ? base.meses - nueva.meses : 0;
+  const maxExtra = Math.max(200_000, Math.ceil((cuota * 3) / 50_000) * 50_000);
+
+  return (
+    <div className="simulador">
+      <p className="sim-base">
+        Si sigues pagando <b className="num">{pesos(cuota)}</b> al mes, terminas en <b>{mesDentroDe(base.meses)}</b> ({base.meses} {base.meses === 1 ? 'mes' : 'meses'})
+        y pagas <b className="num neg">{pesos(base.intereses)}</b> en intereses.
+      </p>
+      <details className="sim-detalle">
+        <summary>¿Cuánto me ahorro abonando a capital?</summary>
+        <label className="sim-control">
+          <span>Abono extra cada mes: <b className="num">{pesos(extra)}</b></span>
+          <input type="range" min={0} max={maxExtra} step={10_000} value={extra} onChange={(e) => setExtra(Number(e.target.value))} />
+        </label>
+        <div className="sim-control">
+          <span>Abono único hoy</span>
+          <div className="chips">
+            {[0, ...ABONOS_UNICOS.filter((v) => v < d.saldo)].map((v) => (
+              <button type="button" key={v} className={unico === v ? 'chip on' : 'chip'} aria-pressed={unico === v} onClick={() => setUnico(v)}>
+                {v ? pesos(v) : 'Ninguno'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {nueva ? (
+          <div className="sim-resultado" aria-live="polite">
+            <p className="sim-ahorro">Te ahorras <b className="num"><Contador valor={ahorro} duracion={500} /></b> en intereses</p>
+            <p>
+              Terminas en <b>{mesDentroDe(nueva.meses)}</b>
+              {mesesMenos > 0 && <> · <b>{mesesMenos} {mesesMenos === 1 ? 'mes' : 'meses'} antes</b></>}
+              {' '}· pagas {pesos(nueva.intereses)} de intereses en vez de {pesos(base.intereses)}.
+            </p>
+            <button type="button" className="btn chico primario" onClick={() => abrir({ tipo: 'abono', item: d, capital: unico || extra })}>
+              Hacer un abono a capital
+            </button>
+          </div>
+        ) : (
+          <p className="sub">Mueve la barra o elige un abono para ver cuánto te ahorras.</p>
+        )}
+      </details>
+    </div>
+  );
+}
+
 function Intereses({ d }: { d: Deuda }) {
   const r = tasaMensual(d.tasa);
   if (!r || d.saldo <= 0) return null;

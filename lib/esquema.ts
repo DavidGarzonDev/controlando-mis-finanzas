@@ -34,6 +34,8 @@ const SENTENCIAS = [
     ultimos4 TEXT, actualizado TIMESTAMPTZ NOT NULL DEFAULT now())`,
   `ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS franquicia TEXT`,
   `ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS color TEXT`,
+  // La cuenta de la que salen los gastos cuando no dices cuál
+  `ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS principal BOOLEAN NOT NULL DEFAULT false`,
   `CREATE TABLE IF NOT EXISTS fijos (
     id SERIAL PRIMARY KEY, concepto TEXT NOT NULL, monto INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS pagos_fijos (

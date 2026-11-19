@@ -38,6 +38,8 @@ export type Deuda = {
 export type Cuenta = {
   id: number; nombre: string; banco: string | null; saldo: number; ultimos4: string | null;
   franquicia: string | null; color: string | null; actualizado: string;
+  /** Los gastos e ingresos sin cuenta se registran en esta. */
+  principal: boolean;
 };
 export type Fijo = { id: number; concepto: string; monto: number; diaPago: number | null; pagadoMes: boolean };
 export type Pendiente = { tipo: 'cuota' | 'fijo'; id: number; nombre: string; monto: number; diaPago: number | null };
@@ -56,6 +58,18 @@ export type Resumen = {
   mes: string;
   /** true si es el mes en curso (solo ahí hay "hoy", límite diario y proyección). */
   esActual: boolean;
+  /**
+   * 'cuentas': tienes cuentas registradas, así que "libre" = lo que tienes en cuentas y efectivo
+   *   menos lo que falta pagar este mes y lo apartado para metas (tu plata real).
+   * 'mes': sin cuentas, "libre" = ingresos del mes menos cuotas, fijos y gastos.
+   */
+  modo: 'cuentas' | 'mes';
+  /** Suma de los saldos de tus cuentas y efectivo. */
+  enCuentas: number;
+  /** Total apartado en metas de ahorro (no se cuenta como plata libre). */
+  apartadoMetas: number;
+  /** Ingresos del mes menos todo lo que salió este mes (el "balance" del mes). */
+  balanceMes: number;
   ingresos: number;
   cuotas: number;
   fijos: number;
@@ -351,26 +365,30 @@ export async function abonarDeudaPorId(id: number, monto: number, cuentaId?: num
 // ---------- Cuentas (débito y billeteras) ----------
 
 export async function cuentas(): Promise<Cuenta[]> {
-  const rows = await sql()`SELECT id, nombre, banco, saldo, ultimos4, franquicia, color, actualizado FROM cuentas ORDER BY saldo DESC, id`;
+  const rows = await sql()`SELECT id, nombre, banco, saldo, ultimos4, franquicia, color, actualizado, principal FROM cuentas ORDER BY principal DESC, saldo DESC, id`;
   return rows.map((r) => ({
     id: n(r.id), nombre: String(r.nombre), banco: (r.banco as string | null) || null, saldo: n(r.saldo),
     ultimos4: (r.ultimos4 as string | null) || null, actualizado: String(r.actualizado),
     franquicia: (r.franquicia as string | null) || null, color: (r.color as string | null) || null,
+    principal: r.principal === true,
   }));
 }
 export async function guardarCuenta(
   id: number | null,
-  c: { nombre: string; banco: string | null; saldo: number; ultimos4: string | null; franquicia: string | null; color: string | null },
+  c: { nombre: string; banco: string | null; saldo: number; ultimos4: string | null; franquicia: string | null; color: string | null; principal?: boolean },
 ) {
+  // Solo una cuenta puede ser la principal.
+  if (c.principal) await sql()`UPDATE cuentas SET principal = false WHERE principal AND id IS DISTINCT FROM ${id}`;
   if (id) {
+    if (c.principal !== undefined) await sql()`UPDATE cuentas SET principal = ${c.principal} WHERE id = ${id}`;
     await sql()`
       UPDATE cuentas SET nombre = ${c.nombre}, banco = ${c.banco}, saldo = ${c.saldo}, ultimos4 = ${c.ultimos4},
         franquicia = ${c.franquicia}, color = ${c.color}, actualizado = now()
       WHERE id = ${id}`;
   } else {
     await sql()`
-      INSERT INTO cuentas (nombre, banco, saldo, ultimos4, franquicia, color)
-      VALUES (${c.nombre}, ${c.banco}, ${c.saldo}, ${c.ultimos4}, ${c.franquicia}, ${c.color})`;
+      INSERT INTO cuentas (nombre, banco, saldo, ultimos4, franquicia, color, principal)
+      VALUES (${c.nombre}, ${c.banco}, ${c.saldo}, ${c.ultimos4}, ${c.franquicia}, ${c.color}, ${c.principal ?? false})`;
   }
 }
 /** La cuenta de efectivo; si no existe, la crea en $0. */
@@ -581,6 +599,11 @@ export async function resumen(mesPedido?: string): Promise<Resumen> {
         (SELECT COALESCE(SUM(monto), 0) FROM gastos
            WHERE (fecha AT TIME ZONE '${ZONA}')::date = (now() AT TIME ZONE '${ZONA}')::date) AS hoy,
         (SELECT COALESCE(SUM(monto), 0) FROM gastos
+           WHERE cuenta_id IS NOT NULL AND (fecha AT TIME ZONE '${ZONA}')::date = (now() AT TIME ZONE '${ZONA}')::date) AS hoy_con_cuenta,
+        (SELECT COUNT(*) FROM cuentas) AS num_cuentas,
+        (SELECT COALESCE(SUM(saldo), 0) FROM cuentas) AS en_cuentas,
+        (SELECT COALESCE(SUM(monto), 0) FROM aportes_meta) AS apartado_metas,
+        (SELECT COALESCE(SUM(monto), 0) FROM gastos
            WHERE (fecha AT TIME ZONE '${ZONA}')::date > (now() AT TIME ZONE '${ZONA}')::date - 7) AS ultimos7,
         (SELECT COALESCE(AVG(t), 0) FROM (
            SELECT SUM(monto) AS t FROM ingresos
@@ -600,6 +623,8 @@ export async function resumen(mesPedido?: string): Promise<Resumen> {
     variables: n(tot.variables),
     ahorro: n(tot.ahorro),
     gastadoHoy: n(tot.hoy),
+    gastadoHoyConCuenta: n(tot.hoy_con_cuenta),
+    cuentas: n(tot.num_cuentas) > 0 ? { total: n(tot.en_cuentas), apartadoMetas: n(tot.apartado_metas) } : null,
     ultimos7: n(tot.ultimos7),
     ingresoPromedio: n(tot.ingreso_promedio),
     porCategoria: cats.map((c) => ({ categoria: String(c.categoria), total: n(c.total) })),
@@ -614,6 +639,9 @@ export async function resumen(mesPedido?: string): Promise<Resumen> {
 export function calcularResumen(d: {
   mes?: string;
   ingresos: number; variables: number; ahorro?: number; gastadoHoy: number; ultimos7: number; ingresoPromedio?: number;
+  /** Si tienes cuentas registradas: su saldo total y lo apartado en metas. */
+  cuentas?: { total: number; apartadoMetas: number } | null;
+  gastadoHoyConCuenta?: number;
   porCategoria: Resumen['porCategoria']; porCategoriaMesAnterior: Resumen['porCategoria'];
   deudas: Deuda[]; fijos: Fijo[]; topes?: Record<string, number>;
 }): Resumen {
@@ -625,7 +653,7 @@ export function calcularResumen(d: {
   // Lo que pagaste de más en la cuota, más los abonos a capital: también salió de tu bolsillo.
   const extraAbonos = d.deudas.reduce((s, x) => s + Math.max(0, x.abonadoMes - x.cuota) + (x.capitalMes ?? 0), 0);
   const fijosTot = d.fijos.reduce((s, f) => s + f.monto, 0);
-  const disponible = d.ingresos - cuotas - fijosTot - d.variables - extraAbonos - ahorro;
+  const balanceMes = d.ingresos - cuotas - fijosTot - d.variables - extraAbonos - ahorro;
 
   const pendientes: Pendiente[] = [
     ...d.deudas
@@ -636,11 +664,19 @@ export function calcularResumen(d: {
       .map((f) => ({ tipo: 'fijo' as const, id: f.id, nombre: f.concepto, monto: f.monto, diaPago: f.diaPago })),
   ].sort((a, b) => (a.diaPago ?? 99) - (b.diaPago ?? 99));
 
+  const totalPendiente = pendientes.reduce((s, p) => s + p.monto, 0);
+  // Con cuentas registradas, lo libre es tu plata real: lo que tienes menos lo que aún debes pagar este mes
+  // y lo apartado para metas. Para meses pasados (o sin cuentas) se usa el balance del mes.
+  const modo: Resumen['modo'] = d.cuentas && hoy.esActual ? 'cuentas' : 'mes';
+  const disponible = modo === 'cuentas' ? d.cuentas!.total - totalPendiente - d.cuentas!.apartadoMetas : balanceMes;
+
   const pago = proximoPago(hoy);
   const gastadoHoy = hoy.esActual ? d.gastadoHoy : 0;
   // El presupuesto de hoy se calcula con la plata que tenías al empezar el día,
   // para que gastar hoy no cambie el número de hoy (solo el de mañana).
-  const presupuestoHoy = hoy.esActual ? Math.max(0, Math.floor((disponible + gastadoHoy) / pago.dias)) : 0;
+  // (Con cuentas, solo los gastos de hoy que salieron de una cuenta ya bajaron el saldo.)
+  const yaDescontadoHoy = modo === 'cuentas' ? (d.gastadoHoyConCuenta ?? 0) : gastadoHoy;
+  const presupuestoHoy = hoy.esActual ? Math.max(0, Math.floor((disponible + yaDescontadoHoy) / pago.dias)) : 0;
   const ritmo7 = Math.round(d.ultimos7 / 7);
 
   let proyeccion: Resumen['proyeccion'] = null;
@@ -653,6 +689,10 @@ export function calcularResumen(d: {
   return {
     mes,
     esActual: hoy.esActual,
+    modo,
+    enCuentas: d.cuentas?.total ?? 0,
+    apartadoMetas: d.cuentas?.apartadoMetas ?? 0,
+    balanceMes,
     ingresos: d.ingresos,
     cuotas,
     fijos: fijosTot,
@@ -669,7 +709,7 @@ export function calcularResumen(d: {
     ritmo7,
     proyeccion,
     pendientes,
-    totalPendiente: pendientes.reduce((s, p) => s + p.monto, 0),
+    totalPendiente,
     diaHoy: hoy.dia,
     diasMes: hoy.diasMes,
   };

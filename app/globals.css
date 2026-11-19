@@ -264,6 +264,11 @@ code {
 .medidor.rojo, .medidor.sobre { --m-fondo: var(--rojo); }
 .medidor.vacio { --m-fondo: var(--papel); --m-tinta: var(--tinta); border: 1px solid var(--linea); box-shadow: none; display: grid; gap: 12px; justify-items: start; }
 .medidor-etiqueta { font-weight: 600; font-size: 0.95rem; opacity: 0.88; }
+.interruptor { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 12px; background: var(--papel-2); cursor: pointer; }
+.interruptor input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+.interruptor span { display: grid; gap: 2px; }
+.interruptor small { color: var(--tinta-3); font-size: 0.8rem; }
+.medidor-hasta { font-weight: 500; opacity: 0.85; }
 .medidor-titulo { font-size: 1.35rem; font-weight: 750; }
 .medidor-cifra {
   font-size: clamp(2.75rem, 11vw, 4.25rem);
@@ -312,8 +317,9 @@ code {
 .datos dd { margin: 2px 0 0; font-weight: 700; font-size: 1rem; }
 .datos small { font-weight: 500; opacity: 0.8; }
 @media (max-width: 420px) {
-  .datos { grid-template-columns: 1fr 1fr; }
-  .datos div:last-child { display: none; }
+  .datos { gap: 8px; }
+  .datos dd { font-size: 0.92rem; }
+  .datos dt { font-size: 0.7rem; }
 }
 
 /* ---------- Filas tipo libreta ---------- */
@@ -1302,4 +1308,20 @@ a.btn { text-decoration: none; color: inherit; }
 .marca-logo { flex: none; width: 44px; height: 44px; filter: drop-shadow(0 4px 10px rgb(0 0 0 / 0.18)); transition: transform 0.3s var(--curva); }
 .marca:hover .marca-logo { transform: rotate(-6deg) scale(1.04); }
 @media (max-width: 599px) { .marca-logo { width: 40px; height: 40px; } }
+/* Simulador de abonos a capital */
+.simulador { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--papel-2); border: 1px solid var(--linea); font-size: 0.9rem; }
+.simulador.alerta { background: var(--rojo-suave); border-color: transparent; }
+.sim-base b.neg { color: var(--rojo); }
+.sim-detalle summary { cursor: pointer; color: var(--azul); font-weight: 650; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.sim-detalle summary::-webkit-details-marker { display: none; }
+.sim-detalle summary::before { content: ''; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform 0.2s var(--curva); }
+.sim-detalle[open] summary::before { transform: rotate(45deg); }
+.sim-detalle[open] > :not(summary) { animation: subir 0.3s var(--curva) both; }
+.sim-control { display: grid; gap: 6px; margin-top: 12px; }
+.sim-control input[type='range'] { width: 100%; accent-color: var(--verde); }
+.sim-resultado { display: grid; gap: 6px; margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--verde-suave); }
+.sim-resultado .btn { justify-self: start; margin-top: 4px; }
+.sim-ahorro { font-size: 1.05rem; }
+.sim-ahorro b { color: var(--verde); font-size: 1.3rem; font-weight: 800; }
+.sim-sin-tasa { font-size: 0.84rem; }
 .desglose { display: block; font-size: 0.72rem; color: var(--tinta-3); font-weight: 500; }

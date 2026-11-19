@@ -19,7 +19,7 @@ export type Editor =
   | { tipo: 'ingreso'; item: Ingreso }
   | { tipo: 'deuda'; item?: Deuda; nuevoTipo?: TipoCredito }
   | { tipo: 'fijo'; item?: Fijo }
-  | { tipo: 'abono'; item: Deuda }
+  | { tipo: 'abono'; item: Deuda; capital?: number }
   | { tipo: 'compra'; item: Deuda }
   | { tipo: 'cuenta'; item?: Cuenta }
   | { tipo: 'topes' }
@@ -157,7 +157,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           <>
             <Campo label="Monto"><Monto name="monto" defaultValue={item?.monto} autoFocus /></Campo>
             <Campo label="¿En qué?"><input name="concepto" required defaultValue={item?.concepto} placeholder="Almuerzo" autoComplete="off" /></Campo>
-            <SelectorCuenta cuentas={cuentas} etiqueta="¿Con qué pagaste?" defecto={item?.cuentaId ?? null} />
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿Con qué pagaste?" defecto={item ? item.cuentaId ?? null : cuentas.find((c) => c.principal)?.id ?? null} />
             {item?.categoria === 'Ajuste' ? (
               <input type="hidden" name="categoria" value="Ajuste" />
             ) : (
@@ -180,7 +180,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
         {tipo === 'ingreso' && (
           <>
             <FormIngreso item={item} />
-            <SelectorCuenta cuentas={cuentas} etiqueta="¿A dónde entró?" defecto={item?.cuentaId ?? null} />
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿A dónde entró?" defecto={item ? item.cuentaId ?? null : cuentas.find((c) => c.principal)?.id ?? null} />
           </>
         )}
 
@@ -292,6 +292,13 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           <>
             <EditorPlastico clase="debito" item={item} />
             <Campo label="Saldo actual"><Monto name="saldo" defaultValue={item?.saldo} opcional /></Campo>
+            <label className="interruptor">
+              <input type="checkbox" name="principal" defaultChecked={item?.principal ?? !cuentas.some((c) => c.principal)} />
+              <span>
+                <b>Cuenta principal</b>
+                <small>Los gastos que registres sin decir de dónde salen se descuentan de esta cuenta.</small>
+              </span>
+            </label>
             <p className="nota">El saldo lo actualizas tú cuando quieras (o desde Telegram: <code>/saldo nequi 250000</code>).</p>
           </>
         )}
@@ -315,7 +322,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
                 Ya la pagué en el banco: solo marcarla como pagada
               </button>
             )}
-            <FormAbono faltaCuota={faltaCuota} saldo={item.saldo} />
+            <FormAbono faltaCuota={faltaCuota} saldo={item.saldo} capital={editor.tipo === 'abono' ? editor.capital : undefined} />
             <SelectorCuenta cuentas={cuentas} etiqueta="¿De qué cuenta salió?" defecto={null} />
           </>
         )}
@@ -449,8 +456,8 @@ function SelectorCuenta({ cuentas, etiqueta, defecto }: { cuentas: Cuenta[]; eti
   );
 }
 
-function FormAbono({ faltaCuota, saldo }: { faltaCuota: number; saldo: number }) {
-  const [tipo, setTipo] = useState<'cuota' | 'capital'>(faltaCuota > 0 ? 'cuota' : 'capital');
+function FormAbono({ faltaCuota, saldo, capital }: { faltaCuota: number; saldo: number; capital?: number }) {
+  const [tipo, setTipo] = useState<'cuota' | 'capital'>(capital || faltaCuota <= 0 ? 'capital' : 'cuota');
   return (
     <>
       <div className="segmento" role="radiogroup" aria-label="Tipo de pago">
@@ -462,7 +469,7 @@ function FormAbono({ faltaCuota, saldo }: { faltaCuota: number; saldo: number })
         ))}
       </div>
       <Campo label={tipo === 'cuota' ? '¿Cuánto pagaste?' : '¿Cuánto abonaste a capital?'}>
-        <Monto name="monto" defaultValue={tipo === 'cuota' ? faltaCuota || undefined : undefined} autoFocus key={tipo} />
+        <Monto name="monto" defaultValue={tipo === 'cuota' ? faltaCuota || undefined : capital || undefined} autoFocus key={tipo} />
       </Campo>
       {tipo === 'capital' && (
         <p className="nota">El abono a capital baja la deuda (hoy {pesos(saldo)}) y los intereses que pagas. No cuenta como la cuota del mes.</p>

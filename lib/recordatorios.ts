@@ -62,7 +62,7 @@ export async function mensajeDelDia(): Promise<string | null> {
   }
 
   // 4) Cómo te fue ayer y cuánto puedes gastar hoy
-  if (r.ingresos > 0) {
+  if (r.modo === 'cuentas' || r.ingresos > 0) {
     const ayerTxt = ayer.veces ? `Ayer gastaste ${pesos(ayer.total)} en ${ayer.veces} ${ayer.veces === 1 ? 'cosa' : 'cosas'}. ` : '';
     bloques.push(
       r.disponible > 0

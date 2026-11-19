@@ -126,6 +126,7 @@ export async function guardarCuenta(fd: FormData) {
     ultimos4: ultimos4De(fd),
     franquicia: texto(fd, 'franquicia') || null,
     color: colorDe(fd),
+    principal: fd.get('principal') === 'on',
   });
   refrescar();
 }

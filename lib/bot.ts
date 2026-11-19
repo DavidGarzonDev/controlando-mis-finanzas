@@ -1,7 +1,7 @@
 import { CATEGORIAS, normalizarCategoria, sinTildes } from './categorias';
 import { extraerMonto, interpretar } from './parser';
 import { interpretarConIA } from './gemini';
-import { generarConsejos } from './consejos';
+import { generarConsejos, simularPago, tasaMensual } from './consejos';
 import { asegurarEsquema } from './esquema';
 import * as db from './datos';
 import { esc, pesos } from './telegram';
@@ -31,6 +31,7 @@ Y lo que te entra, venga de donde venga:
 • <code>compré tenis con la Nu 250 mil a 6 cuotas</code>
 • <code>pagué la cuota de la AV Villas</code> · <code>pagué 200 mil a la Nu</code>
 /tarjetas — cupo disponible de cada tarjeta
+/intereses — cuánto pagarás en intereses y cuánto te ahorras abonando a capital
 
 <b>Cuentas, topes y metas</b>
 • <code>almuerzo 15 mil con nequi</code> — el gasto sale de esa cuenta
@@ -122,6 +123,8 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
     case '/yapague':
     case '/yapagué':
       return yaPague(args);
+    case '/intereses':
+      return textoIntereses();
     case '/tope':
     case '/topes':
       return topes(args);
@@ -192,7 +195,11 @@ export async function manejarMensaje(textoCrudo: string): Promise<string> {
 async function registrar(textoOriginal: string): Promise<string> {
   // "almuerzo 15 mil con nequi": la cuenta se quita del texto y el gasto sale de esa cuenta.
   if (/\b(efectivo|cash)\b/i.test(textoOriginal)) await db.cuentaEfectivo();
-  const cuenta = cuentaDelTexto(textoOriginal, await db.cuentas());
+  const todas = await db.cuentas();
+  const mencionada = cuentaDelTexto(textoOriginal, todas);
+  // Si no dices de qué cuenta, sale de (o entra a) tu cuenta principal, para que los saldos sigan al día.
+  const principal = todas.find((c) => c.principal);
+  const cuenta = mencionada ?? (principal ? { c: principal, resto: textoOriginal } : null);
   const texto = cuenta ? cuenta.resto : textoOriginal;
   const aprendidas = await db.palabrasAprendidas();
   let dato = interpretar(texto, aprendidas);
@@ -241,7 +248,7 @@ async function registrar(textoOriginal: string): Promise<string> {
 
   const lineas = [`✅ <b>${esc(dato.concepto)}</b> ${pesos(dato.monto)} · ${categoria}${usoIA ? ' 🤖' : ''}`];
   if (lineaCuenta) lineas.push(lineaCuenta);
-  if (r.ingresos === 0) {
+  if (r.modo === 'mes' && r.ingresos === 0) {
     lineas.push('Aún no registras ingresos este mes. Escríbeme <code>me pagaron 1100000</code> o <code>tengo 300 mil</code> para calcular cuánto te alcanza.');
   } else if (r.disponible < 0) {
     lineas.push(`⚠️ Vas <b>${pesos(-r.disponible)}</b> por encima de lo que tienes este mes.`);
@@ -271,13 +278,31 @@ async function textoResumen(): Promise<string> {
   const cats = r.porCategoria.length
     ? r.porCategoria.map((c) => `• ${esc(c.categoria)}: ${pesos(c.total)}`).join('\n')
     : '• Aún no registras gastos este mes.';
+  const hoyTxt = r.disponible > 0 ? `Hoy puedes gastar ~${pesos(r.presupuestoHoy)} (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '';
+  if (r.modo === 'cuentas') {
+    const pend = r.pendientes.length
+      ? `Por pagar este mes: −${pesos(r.totalPendiente)}\n${r.pendientes.slice(0, 6).map((p) => `   • ${esc(p.nombre)} ${pesos(p.monto)}`).join('\n')}`
+      : 'Por pagar este mes: nada ✓';
+    return `<b>💰 Tu plata hoy</b>
+En cuentas y efectivo: ${pesos(r.enCuentas)}
+${pend}${r.apartadoMetas ? `\nApartado en metas: −${pesos(r.apartadoMetas)}` : ''}
+<b>Te queda libre: ${pesos(r.disponible)}</b>
+${hoyTxt}
+
+<b>📊 Este mes</b>
+Entró ${pesos(r.ingresos)} · gastos ${pesos(r.variables)} · cuotas ${pesos(r.cuotas)} · fijos ${pesos(r.fijos)}
+
+<b>En qué se va tu plata</b>
+${cats}`;
+  }
   return `<b>📊 Este mes</b>
 Ingresos: ${pesos(r.ingresos)}
 Cuotas de deudas: −${pesos(r.cuotas)}
 Gastos fijos: −${pesos(r.fijos)}
 Gastos del día a día: −${pesos(r.variables)}${r.extraAbonos ? `\nAbonos extra a deudas: −${pesos(r.extraAbonos)}` : ''}
 <b>Te queda libre: ${pesos(r.disponible)}</b>
-${r.disponible > 0 ? `Hoy puedes gastar ~${pesos(r.presupuestoHoy)} (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : ''}
+${hoyTxt}
+Tip: registra tus cuentas y efectivo en el dashboard (Billetera) y te digo cuánto tienes de verdad.
 
 <b>En qué se va tu plata</b>
 ${cats}`;
@@ -285,7 +310,7 @@ ${cats}`;
 
 async function textoHoy(): Promise<string> {
   const [gs, r] = await Promise.all([db.gastosDeHoy(), db.resumen()]);
-  const cabecera = r.ingresos > 0 && r.disponible > 0
+  const cabecera = (r.modo === 'cuentas' || r.ingresos > 0) && r.disponible > 0
     ? `<b>Hoy puedes gastar ${pesos(r.presupuestoHoy)}</b> · llevas ${pesos(r.gastadoHoy)}`
     : '<b>Hoy</b>';
   if (!gs.length) return `${cabecera}\nNo has registrado gastos hoy 👌`;
@@ -711,7 +736,7 @@ async function envioAPersona(texto: string): Promise<string | null> {
   return [
     `📤 ${esc(concepto)}${via}: ${pesos(m.monto)}`,
     `Salió de <b>${esc(origen.c.nombre)}</b> · saldo ${pesos(origen.c.saldo - m.monto)}`,
-    r.ingresos > 0 ? `Libre en el mes: ${pesos(r.disponible)}` : '',
+    r.modo === 'cuentas' || r.ingresos > 0 ? `Libre: ${pesos(r.disponible)}` : '',
     `Si te lo van a devolver, cuando te paguen escríbeme: <code>me pagó ${esc(quien.replace(/^(mi|la|el)\s+/i, '') || 'juan')} ${Math.round(m.monto / 1000)} mil por ${esc(origen.c.nombre.toLowerCase())}</code>`,
   ].filter(Boolean).join('\n');
 }
@@ -730,4 +755,34 @@ async function yaPague(args: string): Promise<string> {
   }
   if (fijo) return marcarPagado(fijo.item.concepto);
   return `No encontré "${esc(busqueda)}" entre tus créditos ni tus gastos fijos. Mira /pendientes.`;
+}
+
+/** Por cada crédito: intereses si sigues igual, y cuánto te ahorras con un abono extra a capital. */
+async function textoIntereses(): Promise<string> {
+  const ds = (await db.deudas()).filter((d) => d.saldo > 0);
+  if (!ds.length) return '🎉 No tienes deudas: no estás pagando intereses.';
+  const lineas: string[] = [];
+  let total = 0;
+  for (const d of ds) {
+    const r = tasaMensual(d.tasa);
+    const cuota = d.cuotaBase || d.cuota;
+    if (!r) {
+      lineas.push(`• <b>${esc(d.nombre)}</b>: sin tasa registrada (agrégala para calcular).`);
+      continue;
+    }
+    const base = simularPago(d.saldo, cuota, r);
+    if (!base) {
+      lineas.push(`• <b>${esc(d.nombre)}</b>: ⚠️ con ${pesos(cuota)} al mes nunca terminas, no alcanza ni para los intereses.`);
+      continue;
+    }
+    total += base.intereses;
+    const extra = Math.max(20_000, Math.round((cuota * 0.5) / 10_000) * 10_000);
+    const mejor = simularPago(d.saldo, cuota, r, extra);
+    const ahorro = mejor ? base.intereses - mejor.intereses : 0;
+    lineas.push(
+      `• <b>${esc(d.nombre)}</b>: ${pesos(base.intereses)} en intereses en ${base.meses} meses.` +
+        (mejor && ahorro > 0 ? `\n   Con ${pesos(extra)} extra al mes: ahorras <b>${pesos(ahorro)}</b> y terminas ${base.meses - mejor.meses} meses antes.` : ''),
+    );
+  }
+  return `<b>💸 Si sigues pagando lo mismo</b>\n${lineas.join('\n')}\n\n<b>Total en intereses: ${pesos(total)}</b>\nPara abonar a capital: <code>abono a capital nu 100 mil</code>`;
 }

@@ -317,13 +317,13 @@ function Medidor({ r, abrir }: { r: TResumen; abrir: (e: Editor) => void }) {
   const pago = r.proximoPago;
   const fechaPago = `${pago.dia} de ${mesCortoDe(pago.mes)}`;
 
-  if (r.ingresos === 0) {
+  if (r.modo === 'mes' && r.ingresos === 0) {
     return (
       <section className="medidor vacio" aria-labelledby="t-hoy">
-        <h2 id="t-hoy" className="medidor-titulo">Empieza por lo que te entra</h2>
+        <h2 id="t-hoy" className="medidor-titulo">Empieza por lo que tienes</h2>
         <p className="medidor-texto">
-          Con tus ingresos calculo cuánto puedes gastar cada día hasta el próximo pago ({fechaPago}).
-          Escríbele al bot <code>me pagaron 1.100.000</code> o <code>tengo 300 mil en efectivo</code>.
+          Agrega tus cuentas y tu efectivo en <b>Billetera</b> con su saldo, o registra lo que te entra, y calculo cuánto puedes
+          gastar cada día hasta el próximo pago ({fechaPago}). Por el bot: <code>me pagaron 1.100.000</code>.
         </p>
         <button className="btn primario" onClick={() => abrir({ tipo: 'nuevo', modo: 'ingreso' })}>
           <Plus size={18} aria-hidden /> Registrar un ingreso
@@ -335,10 +335,12 @@ function Medidor({ r, abrir }: { r: TResumen; abrir: (e: Editor) => void }) {
   if (r.disponible < 0) {
     return (
       <section className="medidor rojo" aria-labelledby="t-hoy">
-        <p className="medidor-etiqueta" id="t-hoy">Este mes vas por encima</p>
+        <p className="medidor-etiqueta" id="t-hoy">{r.modo === 'cuentas' ? 'Te falta para cubrir lo de este mes' : 'Este mes vas por encima'}</p>
         <p className="medidor-cifra num"><Contador valor={-r.disponible} /></p>
         <p className="medidor-texto">
-          Lo que debes pagar y lo que has gastado ya supera lo que te ha entrado. Hasta el {fechaPago} gasta solo en lo necesario.
+          {r.modo === 'cuentas'
+            ? `Tienes ${pesos(r.enCuentas)} y te falta pagar ${pesos(r.totalPendiente)} este mes${r.apartadoMetas ? ` (más ${pesos(r.apartadoMetas)} apartados en metas)` : ''}. Hasta el ${fechaPago} gasta solo en lo necesario.`
+            : `Lo que debes pagar y lo que has gastado ya supera lo que te ha entrado. Hasta el ${fechaPago} gasta solo en lo necesario.`}
         </p>
         <Datos r={r} fechaPago={fechaPago} />
       </section>
@@ -352,7 +354,7 @@ function Medidor({ r, abrir }: { r: TResumen; abrir: (e: Editor) => void }) {
 
   return (
     <section className={`medidor ${estado}`} aria-labelledby="t-hoy">
-      <p className="medidor-etiqueta" id="t-hoy">Hoy puedes gastar</p>
+      <p className="medidor-etiqueta" id="t-hoy">Hoy puedes gastar <span className="medidor-hasta">· hasta el {fechaPago} ({pago.dias} {pago.dias === 1 ? 'día' : 'días'})</span></p>
       <p className="medidor-cifra num"><Contador valor={limite} /></p>
       <div
         className="medidor-pista"
@@ -393,9 +395,19 @@ function Proyeccion({ r }: { r: TResumen }) {
 function Datos({ r, fechaPago }: { r: TResumen; fechaPago: string }) {
   return (
     <dl className="datos">
-      <div><dt>Libre en el mes</dt><dd className="num"><Contador valor={r.disponible} /></dd></div>
-      <div><dt>Próximo pago</dt><dd>{fechaPago} <small>· en {r.proximoPago.dias} {r.proximoPago.dias === 1 ? 'día' : 'días'}</small></dd></div>
-      <div><dt>Ingresos del mes</dt><dd className="num">{pesos(r.ingresos)}</dd></div>
+      {r.modo === 'cuentas' ? (
+        <>
+          <div><dt>Libre</dt><dd className="num"><Contador valor={r.disponible} /></dd></div>
+          <div><dt>En cuentas</dt><dd className="num">{pesos(r.enCuentas)}</dd></div>
+          <div><dt>Por pagar este mes</dt><dd className="num">{pesos(r.totalPendiente)}</dd></div>
+        </>
+      ) : (
+        <>
+          <div><dt>Libre en el mes</dt><dd className="num"><Contador valor={r.disponible} /></dd></div>
+          <div><dt>Próximo pago</dt><dd>{fechaPago} <small>· en {r.proximoPago.dias} {r.proximoPago.dias === 1 ? 'día' : 'días'}</small></dd></div>
+          <div><dt>Ingresos del mes</dt><dd className="num">{pesos(r.ingresos)}</dd></div>
+        </>
+      )}
     </dl>
   );
 }
