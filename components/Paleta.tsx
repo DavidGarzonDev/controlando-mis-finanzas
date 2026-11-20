@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ClipboardList, CornerDownLeft, Download, Gauge, LayoutDashboard,
-  MessageSquareText, PiggyBank, Plus, Search, Target, WalletCards,
+  LogOut, MessageSquareText, PiggyBank, Plus, Search, Target, WalletCards,
 } from 'lucide-react';
 import { registrarTexto, tocarBoton } from '@/app/actions';
+import { salir } from '@/app/entrar/acciones';
 import type { Editor } from './Modal';
 
 type Tab = 'resumen' | 'movimientos' | 'billetera' | 'plan';
@@ -54,6 +55,7 @@ export function Paleta({ abierta, cerrar, ir, abrir, mes }: {
       { id: 'tarjeta', titulo: 'Agregar tarjeta de crédito', Icono: WalletCards, hacer: () => abrir({ tipo: 'deuda', nuevoTipo: 'tarjeta' }) },
       { id: 'cuenta', titulo: 'Agregar cuenta o efectivo', Icono: PiggyBank, hacer: () => abrir({ tipo: 'cuenta' }) },
       { id: 'excel', titulo: 'Descargar movimientos en Excel', Icono: Download, hacer: () => { window.location.href = `/api/exportar?desde=${mes}`; } },
+      { id: 'salir', titulo: 'Cerrar sesión', detalle: 'Para volver a entrar necesitas clave y código', Icono: LogOut, hacer: () => { void salir(); } },
     ];
     const t = q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const filtradas = t ? todas.filter((o) => `${o.titulo} ${o.detalle ?? ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(t)) : todas;

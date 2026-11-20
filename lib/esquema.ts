@@ -88,6 +88,19 @@ const SENTENCIAS = [
   `CREATE TABLE IF NOT EXISTS patrimonio_diario (fecha DATE PRIMARY KEY, activos INTEGER NOT NULL, deudas INTEGER NOT NULL)`,
   // Para no mandar el mismo recordatorio dos veces el mismo día
   `CREATE TABLE IF NOT EXISTS recordatorios_enviados (fecha DATE PRIMARY KEY, enviado TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  // Acceso al dashboard: clave + código por Telegram, sesiones y bloqueo por intentos
+  `CREATE TABLE IF NOT EXISTS intentos_acceso (
+    id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(), ip TEXT NOT NULL,
+    tipo TEXT NOT NULL, exito BOOLEAN NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS intentos_acceso_fecha_idx ON intentos_acceso (fecha DESC)`,
+  `CREATE TABLE IF NOT EXISTS codigos_acceso (
+    id TEXT PRIMARY KEY, hash TEXT NOT NULL, ip TEXT NOT NULL, recordar BOOLEAN NOT NULL DEFAULT false,
+    intentos INTEGER NOT NULL DEFAULT 0, creado TIMESTAMPTZ NOT NULL DEFAULT now(), expira TIMESTAMPTZ NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS sesiones (
+    id TEXT PRIMARY KEY, ip TEXT, agente TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expira TIMESTAMPTZ NOT NULL, ultima TIMESTAMPTZ NOT NULL DEFAULT now(), revocada BOOLEAN NOT NULL DEFAULT false)`,
+  `CREATE TABLE IF NOT EXISTS bloqueos (
+    id SERIAL PRIMARY KEY, ip TEXT, hasta TIMESTAMPTZ NOT NULL, motivo TEXT, creado TIMESTAMPTZ NOT NULL DEFAULT now())`,
 ];
 
 let listo: Promise<void> | null = null;

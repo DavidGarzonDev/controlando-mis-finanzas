@@ -1,4 +1,5 @@
 import { asegurarEsquema } from '@/lib/esquema';
+import { haySesion } from '@/lib/guardia';
 import { mesValido, movimientosParaExportar } from '@/lib/datos';
 
 export const runtime = 'nodejs';
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic';
 /** Descarga los movimientos como CSV para Excel (separado por ; y con tildes bien). Protegido por la contraseña del dashboard. */
 export async function GET(req: Request) {
   await asegurarEsquema();
+  if (!(await haySesion())) return new Response('Sesión vencida. Vuelve a entrar.', { status: 401 });
   const url = new URL(req.url);
   const desde = mesValido(url.searchParams.get('desde'));
   const hasta = mesValido(url.searchParams.get('hasta') ?? desde);

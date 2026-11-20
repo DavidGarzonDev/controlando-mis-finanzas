@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import * as db from '@/lib/datos';
 import { asegurarEsquema } from '@/lib/esquema';
+import { exigirSesion } from '@/lib/guardia';
 import { CATEGORIAS, normalizarCategoria } from '@/lib/categorias';
 
 const texto = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
@@ -27,8 +28,10 @@ async function cuentaDe(fd: FormData): Promise<number | null> {
   return Number(v) || null;
 }
 
+/** Toda acción revisa primero que haya una sesión abierta (si no, no hace nada). */
 async function listo() {
   await asegurarEsquema();
+  await exigirSesion();
 }
 function refrescar() {
   revalidatePath('/');

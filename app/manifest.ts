@@ -3,13 +3,13 @@ import type { MetadataRoute } from 'next';
 /** Permite instalar el dashboard como app en el celular (Agregar a pantalla principal). */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Mis Finanzas',
-    short_name: 'Finanzas',
+    name: 'Pilas — tus finanzas',
+    short_name: 'Pilas',
     description: 'Gastos, deudas, tarjetas y metas en pesos colombianos',
     start_url: '/',
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#2343c4',
+    background_color: '#060a14',
+    theme_color: '#2547d0',
     lang: 'es-CO',
     icons: [
       { src: '/logo-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

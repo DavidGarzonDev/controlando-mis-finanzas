@@ -51,6 +51,11 @@ Y lo que te entra, venga de donde venga:
 /suscripciones — pagos que se repiten cada mes
 /hormiga — gastos pequeños que se acumulan
 También puedes mandarme una <b>nota de voz</b> o la <b>foto de un recibo</b>.
+
+<b>Seguridad del dashboard</b>
+/sesiones — dónde tienes la sesión abierta
+/cerrarsesiones — saca a todos los dispositivos
+/desbloquear — quita el bloqueo por intentos fallidos
 /saldo nequi 250000 — actualiza el saldo de una cuenta (sin monto: ver saldos)
 /pague gimnasio — marca un gasto fijo o una cuota como pagada
 <code>ya pagué la cuota de la nu</code> — si la pagaste en el banco y el saldo ya está al día: solo la marca
@@ -130,6 +135,13 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
       return yaPague(args);
     case '/retos':
       return textoRetos();
+    case '/sesiones':
+      return textoSesiones();
+    case '/cerrarsesiones':
+    case '/salir':
+      return cerrarSesionesWeb();
+    case '/desbloquear':
+      return desbloquearWeb();
     case '/reto':
       return empezarReto(args);
     case '/intereses':
@@ -894,4 +906,31 @@ async function empezarReto(args: string): Promise<string> {
   await crearReto(c.clave, limite);
   const extra = c.tipo === 'limite' ? ` Tu límite: ${pesos(Math.max(1000, Math.round(limite / 1000) * 1000))} por día.` : '';
   return `🔥 ¡Empezó tu reto <b>${esc(c.nombre)}</b>! ${esc(c.descripcion)}.${extra} Te aviso si se rompe o cuando lo logres.`;
+}
+
+
+// ---------- Seguridad del dashboard (solo tú puedes escribirle al bot) ----------
+
+async function textoSesiones(): Promise<string> {
+  const { sesionesAbiertas, dispositivo } = await import('./acceso');
+  const ss = await sesionesAbiertas();
+  if (!ss.length) return '🔒 No hay ninguna sesión abierta en el dashboard.';
+  const f = (d: string) => new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  return `<b>Sesiones abiertas</b>\n${ss
+    .map((x) => `• ${esc(dispositivo(x.agente))} · IP <code>${esc(x.ip)}</code>\n  entró ${f(x.creada)} · última vez ${f(x.ultima)}`)
+    .join('\n')}\n\n¿Alguna no es tuya? /cerrarsesiones`;
+}
+
+async function cerrarSesionesWeb(): Promise<string> {
+  const { cerrarTodas } = await import('./acceso');
+  const n = await cerrarTodas();
+  return n
+    ? `🔒 Cerré ${n === 1 ? 'la sesión abierta' : `las ${n} sesiones abiertas`}. Para volver a entrar necesitas tu clave y un código nuevo.`
+    : '🔒 No había sesiones abiertas.';
+}
+
+async function desbloquearWeb(): Promise<string> {
+  const { desbloquear } = await import('./acceso');
+  const n = await desbloquear();
+  return n ? '🔓 Listo, quité el bloqueo. Ya puedes intentar entrar otra vez.' : 'No hay ningún bloqueo activo.';
 }

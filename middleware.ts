@@ -1,26 +1,37 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { COOKIE_SESION, leerCookieSesion } from '@/lib/sesion';
 
-/** Protege el dashboard con contraseña. El webhook de Telegram queda por fuera (tiene su propio secreto). */
-export function middleware(req: NextRequest) {
-  const clave = process.env.DASHBOARD_PASSWORD;
-  if (!clave) return new NextResponse('Falta configurar DASHBOARD_PASSWORD en Vercel.', { status: 500 });
+/**
+ * Primera barrera del dashboard: sin una cookie de sesión firmada y vigente, nada pasa.
+ * (La segunda barrera revisa en la base que la sesión siga abierta, en la página y en cada acción.)
+ * El webhook de Telegram y el cron quedan por fuera: tienen su propio secreto.
+ */
+export async function middleware(req: NextRequest) {
+  const sesion = await leerCookieSesion(req.cookies.get(COOKIE_SESION)?.value).catch(() => null);
+  const enEntrar = req.nextUrl.pathname === '/entrar';
 
-  const auth = req.headers.get('authorization');
-  if (auth?.startsWith('Basic ')) {
-    try {
-      const decodificado = atob(auth.slice(6));
-      const contrasena = decodificado.slice(decodificado.indexOf(':') + 1);
-      if (contrasena === clave) return NextResponse.next();
-    } catch {
-      /* encabezado mal formado */
-    }
+  if (enEntrar) {
+    // Con sesión, no tiene sentido ver la pantalla de entrada.
+    if (sesion && req.method === 'GET') return NextResponse.redirect(new URL('/', req.url));
+    return conCabeceras(NextResponse.next());
   }
-  return new NextResponse('Escribe la contraseña para entrar.', {
-    status: 401,
-    headers: { 'WWW-Authenticate': 'Basic realm="Mis Finanzas", charset="UTF-8"' },
-  });
+  if (sesion) return conCabeceras(NextResponse.next());
+
+  if (req.method === 'GET' && req.headers.get('accept')?.includes('text/html')) {
+    return NextResponse.redirect(new URL('/entrar', req.url));
+  }
+  return new NextResponse('Sesión vencida. Vuelve a entrar.', { status: 401 });
+}
+
+/** Cabeceras de seguridad: no se puede meter la página en un iframe ni filtrar la URL a otros sitios. */
+function conCabeceras(res: NextResponse) {
+  res.headers.set('X-Frame-Options', 'DENY');
+  res.headers.set('Referrer-Policy', 'same-origin');
+  res.headers.set('X-Content-Type-Options', 'nosniff');
+  res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  return res;
 }
 
 export const config = {
-  matcher: ['/((?!api/telegram|api/cron|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|logo-).*)'],
+  matcher: ['/((?!api/telegram|api/cron|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|logo-|fondo-).*)'],
 };

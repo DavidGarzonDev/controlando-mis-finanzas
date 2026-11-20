@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { flushSync } from 'react-dom';
 import {
   ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
-  ChartPie, ChartSpline, Lightbulb, ListChecks, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
+  ChartPie, ChartSpline, Lightbulb, ListChecks, LogOut, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
 } from 'lucide-react';
 import { marcarFijo } from '@/app/actions';
 import type { Consejo, Nivel } from '@/lib/consejos';
@@ -21,6 +21,7 @@ import { Contador, conTransicion } from './animacion';
 import { BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
 import { Paleta } from './Paleta';
+import { salir } from '@/app/entrar/acciones';
 import { COLOR_CAT, ICONO_CAT, claveDia, fechaCorta, hora, mesCortoDe, nombreMes, pesos } from './util';
 
 type Props = {
@@ -74,7 +75,9 @@ export default function App(p: Props) {
   const ir = useCallback((t: Tab) => {
     if (t === tab) return;
     history.pushState(null, '', `${window.location.pathname}${window.location.search}${t === 'resumen' ? '' : `#${t}`}`);
-    conTransicion(() => flushSync(() => setTab(t)));
+    const i = TABS.findIndex((x) => x.id === tab);
+    const j = TABS.findIndex((x) => x.id === t);
+    conTransicion(() => flushSync(() => setTab(t)), j > i ? 'adelante' : 'atras');
     window.scrollTo({ top: 0 });
   }, [tab]);
 
@@ -109,10 +112,10 @@ export default function App(p: Props) {
         <div className="marca">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="marca-logo" src="/logo-192.png" alt="" width={40} height={40} />
-          <span className="marca-nombre">Mis Finanzas</span>
+          <span className="marca-nombre">Pilas</span>
         </div>
         <button className="buscador solo-escritorio" onClick={() => setPaleta(true)}>
-          <Search size={17} aria-hidden /> <span>Buscar o registrar</span> <kbd>Ctrl K</kbd>
+          <Search size={17} aria-hidden /> <span>Buscar…</span> <kbd>Ctrl K</kbd>
         </button>
         <nav className="tabs" role="tablist" aria-label="Secciones" ref={tabsRef} onKeyDown={teclaTabs}>
           {TABS.map(({ id, label, Icono }) => (
@@ -136,6 +139,9 @@ export default function App(p: Props) {
           <button className="btn primario registrar" aria-label="Registrar" onClick={() => setEditor({ tipo: 'nuevo', modo: 'gasto' })}>
             <Plus size={22} aria-hidden /> <span>Registrar</span>
           </button>
+          <form action={salir} className="solo-escritorio">
+            <button className="salir"><LogOut size={16} aria-hidden /> Cerrar sesión</button>
+          </form>
           <p className="lateral-tip solo-escritorio">
             <Send size={14} aria-hidden /> También por Telegram: <code>almuerzo 15 mil</code>
           </p>

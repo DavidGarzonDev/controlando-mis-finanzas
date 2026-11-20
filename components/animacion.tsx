@@ -36,8 +36,11 @@ export function Contador({ valor, formato = pesos, duracion = 900 }: { valor: nu
 }
 
 /** Cambia de vista con una transición suave donde el navegador la soporte. */
-export function conTransicion(cambio: () => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+export function conTransicion(cambio: () => void, direccion: 'adelante' | 'atras' | null = null) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
   if (!doc.startViewTransition || reducido()) return cambio();
-  doc.startViewTransition(cambio);
+  const html = document.documentElement;
+  if (direccion) html.dataset.vt = direccion;
+  else delete html.dataset.vt;
+  doc.startViewTransition(cambio).finished.finally(() => delete html.dataset.vt);
 }

@@ -3,9 +3,10 @@ import '@fontsource-variable/manrope';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Mis Finanzas',
-  description: 'Gastos, deudas e ingresos del mes',
-  appleWebApp: { capable: true, title: 'Finanzas', statusBarStyle: 'black-translucent' },
+  title: 'Pilas',
+  description: 'Pilas con la plata: gastos, cuentas, tarjetas y metas',
+  robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: 'Pilas', statusBarStyle: 'black-translucent' },
 };
 
 export const viewport: Viewport = {

@@ -16,8 +16,8 @@ const teclado = (botones?: Boton[][]) =>
   botones?.length ? { inline_keyboard: botones.map((fila) => fila.map((b) => ({ text: b.texto, callback_data: b.dato }))) } : undefined;
 
 /** Manda un mensaje; con `botones`, debajo aparecen botones que el usuario puede tocar. */
-export async function enviarMensaje(chatId: number | string, texto: string, botones?: Boton[][]) {
-  await api('sendMessage', { chat_id: chatId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: teclado(botones) });
+export async function enviarMensaje(chatId: number | string, texto: string, botones?: Boton[][]): Promise<boolean> {
+  return Boolean(await api('sendMessage', { chat_id: chatId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: teclado(botones) }));
 }
 
 /** Cambia el texto de un mensaje ya enviado (y quita sus botones). */

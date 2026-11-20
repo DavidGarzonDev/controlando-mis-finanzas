@@ -1,4 +1,4 @@
-# Mis Finanzas — bot de Telegram + dashboard
+# Pilas — bot de Telegram + dashboard para tus finanzas
 
 Escribes tus gastos en Telegram (`almuerzo 15 mil`) y los ves en un dashboard web.
 
@@ -146,7 +146,15 @@ Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cua
 
 ### El dashboard
 
-Abre `https://TU-APP.vercel.app`, usuario cualquiera y tu `DASHBOARD_PASSWORD`.
+Abre `https://TU-APP.vercel.app`: escribe tu `DASHBOARD_PASSWORD` y luego el **código de 6 dígitos** que te llega al Telegram (vence en 5 minutos).
+
+**Seguridad del acceso**
+- Clave + código por Telegram: aunque alguien sepa tu clave, sin tu Telegram no entra.
+- 5 intentos fallidos (clave o código) desde una conexión → bloqueada 15 minutos. 15 fallidos en una hora desde cualquier lado → nadie entra durante 1 hora.
+- Te llega un aviso por Telegram en cada inicio de sesión y en cada bloqueo.
+- Desde el bot: `/sesiones` (dónde tienes sesión abierta), `/cerrarsesiones` (saca a todos) y `/desbloquear` (si te bloqueaste tú).
+- La sesión dura 12 horas, o 30 días si marcas *Recordar este dispositivo*. Las cookies van firmadas y la sesión se revisa en la base en cada acción, así que `/cerrarsesiones` corta el acceso al instante.
+- Opcional: `AUTH_SECRET` (32+ caracteres aleatorios) para firmar las sesiones; si no está, se deriva de tus otros secretos.
 
 - **Resumen:** cuánto puedes gastar hoy hasta tu próximo pago (15 y 30 por defecto; cámbialo con `DIAS_DE_PAGO`), cómo va el mes contra el ritmo que te alcanza, en qué se va la plata comparado con el mes pasado, calendario de gasto por día, recomendaciones y lo que falta pagar.
 - **Movimientos:** todo lo del mes (gastos, ingresos y movimientos entre cuentas), con búsqueda, filtros y descarga a Excel.
@@ -193,7 +201,8 @@ components/App.tsx         → el dashboard (pestañas)
 components/Creditos.tsx    → la billetera: cuentas, tarjetas y préstamos
 components/graficas.tsx    → gráficas (SVG propio, sin librerías)
 components/Modal.tsx       → ventanas para registrar y editar
-middleware.ts              → contraseña del dashboard
+middleware.ts              → sin sesión firmada no se ve nada (redirige a /entrar)
+lib/acceso.ts              → clave + código por Telegram, bloqueos y sesiones
 db/schema.sql              → tablas (referencia)
 db/seed.example.sql        → datos de ejemplo (plantilla)
 ```
