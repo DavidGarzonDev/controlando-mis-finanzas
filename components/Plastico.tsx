@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react';
 import { Nfc } from 'lucide-react';
-import { bancoPorId, estiloTarjeta, logoBanco, sello, type Banco } from '@/lib/bancos';
+import { bancoPorId, disenoTarjeta, estiloTarjeta, logoBanco, sello, type Banco } from '@/lib/bancos';
 
 /** Inclina la tarjeta siguiendo el dedo o el mouse, con un brillo que se mueve encima. */
 function inclinar(e: React.PointerEvent<HTMLElement>) {
@@ -56,9 +56,25 @@ function Chip() {
   );
 }
 
-/** La franquicia escrita como en el plástico (solo texto, sin logos). */
+/** Los dos círculos de Mastercard (rojo, amarillo y naranja donde se cruzan). */
+function CirculosMastercard() {
+  const id = useId();
+  return (
+    <svg className="plastico-franq f-master-circulos" viewBox="0 0 48 30" role="img" aria-label="Mastercard">
+      <defs>
+        <clipPath id={id}><circle cx="17" cy="15" r="13" /></clipPath>
+      </defs>
+      <circle cx="17" cy="15" r="13" fill="#eb001b" />
+      <circle cx="31" cy="15" r="13" fill="#f79e1b" />
+      <circle cx="31" cy="15" r="13" fill="#ff5f00" clipPath={`url(#${id})`} />
+    </svg>
+  );
+}
+
+/** La franquicia como se ve en el plástico. */
 function Franquicia({ f }: { f: string | null }) {
   if (!f || f === 'Otra') return null;
+  if (f === 'Mastercard') return <CirculosMastercard />;
   const clase = f === 'Visa' ? 'f-visa' : f === 'Mastercard' ? 'f-master' : f === 'American Express' ? 'f-amex' : 'f-diners';
   const texto = f === 'Mastercard' ? 'mastercard' : f === 'American Express' ? 'AMERICAN EXPRESS' : f === 'Diners' ? 'Diners Club' : 'VISA';
   return <span className={`plastico-franq ${clase}`}>{texto}</span>;
@@ -82,9 +98,12 @@ export function Plastico({ d, clase, arriba, centro, mini }: {
   const b = bancoPorId(d.banco);
   const e = estiloTarjeta(d.color, d.banco);
   const nombreBanco = d.banco && d.banco !== 'otro' ? b.nombre : d.nombre || 'Tarjeta';
+  const esEfectivo = d.banco === 'efectivo';
+  // El efectivo es un billete, no una tarjeta: sin chip, sin franquicia, sin número.
+  const diseno = esEfectivo ? 'd-efectivo' : d.color ? null : disenoTarjeta(d.banco, clase);
   return (
     <span
-      className={`tarjeta plastico${mini ? ' mini' : ''}${e.metal ? ' metal' : ''}`}
+      className={`tarjeta plastico${mini ? ' mini' : ''}${e.metal ? ' metal' : ''}${diseno ? ` diseno ${diseno}` : ''}`}
       onPointerMove={inclinar}
       onPointerLeave={soltar}
       style={{ '--t1': e.t1, '--t2': e.t2, '--tt': e.tt, '--ta': e.ta } as React.CSSProperties}
@@ -94,7 +113,7 @@ export function Plastico({ d, clase, arriba, centro, mini }: {
           <SelloBanco b={b} chico={mini} />
           <span className="tarjeta-banco">{nombreBanco}</span>
         </span>
-        {arriba ?? <Nfc size={mini ? 18 : 22} aria-hidden className="tarjeta-nfc-mini" />}
+        {arriba ?? (esEfectivo ? null : <Nfc size={mini ? 18 : 22} aria-hidden className="tarjeta-nfc-mini" />)}
       </span>
 
       {centro ? (
@@ -113,10 +132,10 @@ export function Plastico({ d, clase, arriba, centro, mini }: {
 
       <span className="tarjeta-pie">
         <span className="tarjeta-titular">
-          <small>{clase === 'credito' ? 'CRÉDITO' : 'DÉBITO'}{mini && d.ultimos4 ? ` · ${d.ultimos4}` : ''}</small>
+          <small>{esEfectivo ? 'EN LA BILLETERA' : clase === 'credito' ? 'CRÉDITO' : 'DÉBITO'}{!esEfectivo && mini && d.ultimos4 ? ` · ${d.ultimos4}` : ''}</small>
           <span className="tarjeta-nombre">{d.nombre || nombreBanco}</span>
         </span>
-        <Franquicia f={d.franquicia} />
+        {esEfectivo ? <span className="billete-signo" aria-hidden>$</span> : <Franquicia f={d.franquicia} />}
       </span>
     </span>
   );

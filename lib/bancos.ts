@@ -16,11 +16,11 @@ export function logoBanco(b: Banco): string | null {
 }
 
 export const BANCOS: Banco[] = [
-  { id: 'bancolombia', dominio: 'bancolombia.com', nombre: 'Bancolombia', alias: ['bancolombia'], fondo: ['#2b2b2b', '#121212'], tinta: '#ffffff', acento: '#fdda24' },
+  { id: 'bancolombia', dominio: 'bancolombia.com', nombre: 'Bancolombia', alias: ['bancolombia'], fondo: ['#fdda24', '#f7c900'], tinta: '#141414', acento: '#141414' },
   { id: 'davivienda', dominio: 'davivienda.com', nombre: 'Davivienda', alias: ['davivienda'], fondo: ['#e1251b', '#9e0f0a'], tinta: '#ffffff', acento: '#ffd1cc' },
   { id: 'bbva', dominio: 'bbva.com.co', nombre: 'BBVA', alias: ['bbva'], fondo: ['#1464a5', '#072146'], tinta: '#ffffff', acento: '#5bbeff' },
   { id: 'bogota', dominio: 'bancodebogota.com', nombre: 'Banco de Bogotá', alias: ['banco de bogota'], fondo: ['#1a4a9c', '#0b2559'], tinta: '#ffffff', acento: '#9cc2ff' },
-  { id: 'avvillas', dominio: 'avvillas.com.co', nombre: 'AV Villas', alias: ['av villas', 'avvillas', 'villas'], fondo: ['#0b5bb5', '#063574'], tinta: '#ffffff', acento: '#ff5a5f' },
+  { id: 'avvillas', dominio: 'avvillas.com.co', nombre: 'AV Villas', alias: ['av villas', 'avvillas', 'villas'], fondo: ['#ee2a2f', '#c8101a'], tinta: '#ffffff', acento: '#ffffff' },
   { id: 'occidente', dominio: 'bancodeoccidente.com.co', nombre: 'Banco de Occidente', alias: ['banco de occidente', 'occidente'], fondo: ['#0a63b0', '#043d6f'], tinta: '#ffffff', acento: '#7fd0ff' },
   { id: 'popular', dominio: 'bancopopular.com.co', nombre: 'Banco Popular', alias: ['banco popular'], fondo: ['#0f8a4b', '#065a2f'], tinta: '#ffffff', acento: '#b7f5cf' },
   { id: 'cajasocial', dominio: 'bancocajasocial.com', nombre: 'Banco Caja Social', alias: ['caja social'], fondo: ['#0b5ea8', '#063a69'], tinta: '#ffffff', acento: '#ffc94d' },
@@ -28,7 +28,7 @@ export const BANCOS: Banco[] = [
   { id: 'colpatria', dominio: 'scotiabankcolpatria.com', nombre: 'Scotiabank Colpatria', alias: ['scotiabank colpatria', 'colpatria', 'scotiabank', 'scotia'], fondo: ['#e3242b', '#8f0d12'], tinta: '#ffffff', acento: '#ffffff' },
   { id: 'itau', dominio: 'itau.co', nombre: 'Itaú', alias: ['itau'], fondo: ['#f07c00', '#b85300'], tinta: '#ffffff', acento: '#003399' },
   { id: 'falabella', dominio: 'bancofalabella.com.co', nombre: 'Banco Falabella', alias: ['falabella', 'cmr'], fondo: ['#4a9a2c', '#2b6418'], tinta: '#ffffff', acento: '#d9f2c9' },
-  { id: 'nu', dominio: 'nu.com.co', nombre: 'Nu', alias: ['nubank', 'nu'], fondo: ['#8a19d6', '#530a8a'], tinta: '#ffffff', acento: '#e7c6ff' },
+  { id: 'nu', dominio: 'nu.com.co', nombre: 'Nu', alias: ['nubank', 'nu'], fondo: ['#9a2ee6', '#5d0aa8'], tinta: '#ffffff', acento: '#e7c6ff' },
   { id: 'rappi', dominio: 'rappicard.co', nombre: 'RappiCard', alias: ['rappicard', 'rappi'], fondo: ['#ff5233', '#c0300f'], tinta: '#ffffff', acento: '#fff1ec' },
   { id: 'lulo', dominio: 'lulobank.com', nombre: 'Lulo Bank', alias: ['lulo bank', 'lulo'], fondo: ['#2a2a2a', '#0f0f0f'], tinta: '#ffffff', acento: '#c8ff3c' },
   { id: 'serfinanza', dominio: 'bancoserfinanza.com', nombre: 'Serfinanza', alias: ['serfinanza', 'olimpica'], fondo: ['#00498f', '#002a55'], tinta: '#ffffff', acento: '#ffd23f' },
@@ -75,6 +75,20 @@ export const ACABADOS: Acabado[] = [
   { id: 'rosa', nombre: 'Rosa', fondo: ['#f06ba8', '#b0306e'], tinta: '#ffffff', acento: '#ffe0ef' },
   { id: 'naranja', nombre: 'Naranja', fondo: ['#ff8a1f', '#c2550a'], tinta: '#ffffff', acento: '#fff0df' },
 ];
+
+/**
+ * Diseño propio de algunas tarjetas (dibujado en CSS, inspirado en el plástico real):
+ * Bancolombia amarilla con franjas, Nu lila (débito) o morada metálica (crédito), AV Villas roja en zigzag.
+ * Solo aplica con los colores del banco (si eliges otro color, se usa ese).
+ */
+export function disenoTarjeta(bancoId: string | null | undefined, clase: 'credito' | 'debito'): string | null {
+  if (bancoId === 'bancolombia') return 'd-bancolombia';
+  if (bancoId === 'nu') return clase === 'debito' ? 'd-nu-debito' : 'd-nu-credito';
+  if (bancoId === 'avvillas') return 'd-avvillas';
+  if (bancoId === 'nequi') return 'd-nequi';
+  if (bancoId === 'efectivo') return 'd-efectivo';
+  return null;
+}
 
 /** Blanco o casi negro según qué se lea mejor sobre el color. */
 function tintaPara(hex: string) {

@@ -382,7 +382,11 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
   return (
     <>
       <div className="vista-previa" aria-hidden>
-        <Plastico d={{ banco, nombre, franquicia, ultimos4: ultimos4 || null, color: color === 'banco' ? null : color }} clase={clase} />
+        <Plastico
+          d={{ banco, nombre, franquicia: banco === 'efectivo' ? null : franquicia, ultimos4: banco === 'efectivo' ? null : ultimos4 || null, color: color === 'banco' ? null : color }}
+          clase={clase}
+          centro={banco === 'efectivo' ? <span className="tarjeta-saldo"><small>Efectivo</small><b>$ · · ·</b></span> : undefined}
+        />
       </div>
       <div className="fila2">
         <Campo label={clase === 'credito' ? 'Banco' : 'Banco o billetera'}>
@@ -394,6 +398,13 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
           <input name="nombre" required value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder={clase === 'credito' ? 'AV Villas' : 'Ahorros Bancolombia'} autoComplete="off" />
         </Campo>
       </div>
+      {banco === 'efectivo' ? (
+        <>
+          <input type="hidden" name="franquicia" value="" />
+          <input type="hidden" name="ultimos4" value="" />
+        </>
+      ) : (
+      <>
       <fieldset className="opciones-franq">
         <legend>Franquicia</legend>
         {FRANQUICIAS.map((f) => (
@@ -406,6 +417,11 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
       <Campo label="Últimos 4 dígitos" ayuda="Opcional, solo para reconocerla">
         <input name="ultimos4" inputMode="numeric" maxLength={4} value={ultimos4} onChange={(e) => setUltimos4(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1234" autoComplete="off" />
       </Campo>
+      </>
+      )}
+      {banco === 'efectivo' ? (
+        <input type="hidden" name="color" value="banco" />
+      ) : (
       <fieldset className="colores">
         <legend>Color de la tarjeta</legend>
         <input type="hidden" name="color" value={color} />
@@ -427,6 +443,7 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
           {color === 'banco' ? `Colores de ${bancoPorId(banco).nombre}` : libre ? 'Color personalizado' : ACABADOS.find((a) => a.id === color)?.nombre}
         </small>
       </fieldset>
+      )}
     </>
   );
 }

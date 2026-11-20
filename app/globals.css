@@ -1325,3 +1325,83 @@ a.btn { text-decoration: none; color: inherit; }
 .sim-ahorro b { color: var(--verde); font-size: 1.3rem; font-weight: 800; }
 .sim-sin-tasa { font-size: 0.84rem; }
 .desglose { display: block; font-size: 0.72rem; color: var(--tinta-3); font-weight: 500; }
+
+/* ======================================================================
+   Diseños propios por banco (inspirados en el plástico real, dibujados en CSS)
+   ====================================================================== */
+
+.tarjeta.diseno::before { display: none; }
+.tarjeta.diseno > * { position: relative; z-index: 1; }
+
+/* Bancolombia débito: amarilla con franjas curvas de colores solo del lado izquierdo */
+.tarjeta.d-bancolombia {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.25), transparent 55%),
+    radial-gradient(ellipse 60% 125% at -16% 112%,
+      transparent 0 52%,
+      #29b77f 52% 60%, transparent 60% 63%,
+      #00a9e0 63% 68%, transparent 68% 71%,
+      #8f5bd8 71% 79%, transparent 79% 82%,
+      #f59ac2 82% 88%, transparent 88% 91%,
+      #ff7a2f 91% 97%, transparent 97%),
+    linear-gradient(135deg, #fde22e, #fbd000);
+}
+.tarjeta.d-bancolombia .tarjeta-banco { font-weight: 900; letter-spacing: -0.02em; }
+
+/* Nu débito: lila claro, plano y suave */
+.tarjeta.d-nu-debito {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.28), transparent 55%),
+    linear-gradient(135deg, #c99cf0, #ac7ae3 55%, #9c66d9);
+}
+
+/* Nu crédito: morado profundo con brillo metálico y borde que refleja */
+.tarjeta.d-nu-credito {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.26), transparent 50%),
+    radial-gradient(80% 120% at 0% 100%, rgb(255 140 230 / 0.18), transparent 60%),
+    linear-gradient(150deg, #a43cf2, #7a14d4 45%, #520a9c);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), inset 0 -1px 0 rgb(255 120 200 / 0.35), 0 18px 36px -18px rgb(60 0 110 / 0.7);
+}
+.tarjeta.d-nu-credito .tarjeta-numero, .tarjeta.d-nu-credito .tarjeta-titular small { color: #e6c8ff; }
+
+/* AV Villas: roja con un zigzag muy sutil en la mitad derecha */
+.tarjeta.d-avvillas {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.18), transparent 55%),
+    linear-gradient(90deg, #e8242b 0 45%, transparent 75%),
+    linear-gradient(135deg, rgb(0 0 0 / 0.07) 25%, transparent 25%) 0 0 / 64px 64px,
+    linear-gradient(225deg, rgb(0 0 0 / 0.07) 25%, transparent 25%) 0 0 / 64px 64px,
+    linear-gradient(135deg, #f0272e, #d3121b);
+}
+
+/* Nequi: morado muy oscuro con líneas finas en rosado y el punto rosado */
+.tarjeta.d-nequi {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.14), transparent 55%),
+    repeating-radial-gradient(circle at 105% 115%, transparent 0 18px, rgb(229 0 126 / 0.22) 18px 19px),
+    repeating-linear-gradient(115deg, transparent 0 34px, rgb(229 0 126 / 0.12) 34px 35px),
+    linear-gradient(160deg, #3a0b3c, #22061f 60%, #16041a);
+}
+.tarjeta.d-nequi .tarjeta-banco::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #e5007e; margin-right: 5px; vertical-align: 0.5em; }
+
+/* Efectivo: un billete, con guilloche (los anillos finos de los billetes) */
+.tarjeta.d-efectivo {
+  background:
+    radial-gradient(120% 90% at var(--mx) var(--my), rgb(255 255 255 / 0.2), transparent 55%),
+    repeating-radial-gradient(ellipse at 78% 50%, transparent 0 6px, rgb(255 255 255 / 0.1) 6px 7px),
+    linear-gradient(135deg, #3a9d63, #1f6e45);
+  border: 2px solid rgb(255 255 255 / 0.25);
+  outline: 1px dashed rgb(255 255 255 / 0.25);
+  outline-offset: -8px;
+}
+.billete-signo {
+  font-size: 2.2rem;
+  font-weight: 900;
+  line-height: 0.8;
+  opacity: 0.45;
+}
+.tarjeta.mini .billete-signo { font-size: 1.6rem; }
+
+.f-master-circulos { width: 46px; height: 29px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.2)); }
+.tarjeta.mini .f-master-circulos { width: 36px; height: 23px; }
