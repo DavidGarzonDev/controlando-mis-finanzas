@@ -2440,12 +2440,25 @@ html[data-privado] :is(.num, .ficha-cifra, .medidor-cifra):hover { filter: blur(
 
 /* ---------- Tarjetas: giroscopio y voltear ---------- */
 .tarjeta { --rx: var(--grx, 0deg); --ry: var(--gry, 0deg); --mx: var(--gmx, 30%); --my: var(--gmy, 0%); }
-.volteo { display: grid; perspective: 1200px; width: 100%; }
-.volteo > .cara { grid-area: 1 / 1; display: block; -webkit-backface-visibility: hidden; backface-visibility: hidden; transition: transform 0.7s var(--curva), visibility 0s 0.35s; }
-.volteo:not(.on) > .atras, .volteo.on > .frente { visibility: hidden; }
-.volteo > .atras { transform: rotateY(180deg); }
-.volteo.on > .frente { transform: rotateY(-180deg); }
-.volteo.on > .atras { transform: rotateY(0deg); }
+/* Voltear: una sola pieza gira en 3D con las dos caras pegadas (frente y reverso) */
+.volteo { display: block; width: 100%; perspective: 1400px; }
+.volteo-interior {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: transform;
+}
+.volteo.on .volteo-interior { transform: rotateY(180deg); }
+.volteo-interior > .cara {
+  grid-area: 1 / 1;
+  display: block;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.volteo-interior > .atras { transform: rotateY(180deg); }
+/* Mientras gira, la tarjeta no se inclina con el mouse (evita saltos) */
+.volteo .tarjeta { transition: box-shadow 0.35s var(--curva); }
+.billetera-col { display: grid; gap: 4px; min-width: 0; }
 .reverso-tarjeta { padding: 0 0 14px; gap: 10px; }
 .reverso-tarjeta .banda { display: block; height: 22%; margin-top: 7%; background: linear-gradient(180deg, #111, #2a2a2a 60%, #111); }
 .reverso-tarjeta .firma {

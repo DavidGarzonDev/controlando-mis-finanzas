@@ -96,6 +96,7 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
       </div>
       {tarjetas.length ? (
         <div className="billetera-zona">
+          <div className="billetera-col">
           <div className="billetera" role="listbox" aria-label="Tus tarjetas" aria-activedescendant={elegida ? `tarjeta-${elegida.id}` : undefined}>
             {/* Las demás quedan apiladas arriba (se ve su franja) y la elegida va completa al final. */}
             {[...tarjetas.filter((t) => t.id !== elegida?.id), ...(elegida ? [elegida] : [])].map((t) => (
@@ -118,6 +119,7 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
             ))}
           </div>
           <p className="pista-volteo">Toca la tarjeta de adelante para ver su reverso</p>
+          </div>
 
           {elegida && (
             <section className="tarjeta-detalle" aria-label={`Detalle de ${elegida.nombre}`}>
@@ -222,8 +224,10 @@ function TarjetaCredito({ t, volteada = false }: { t: Deuda; volteada?: boolean 
   ];
   return (
     <span className={`volteo ${volteada ? 'on' : ''}`}>
-      <span className="cara frente"><FrenteCredito t={t} disponible={disponible} /></span>
-      <span className="cara atras" aria-hidden={!volteada}><Reverso d={t} filas={filas} /></span>
+      <span className="volteo-interior">
+        <span className="cara frente"><FrenteCredito t={t} disponible={disponible} /></span>
+        <span className="cara atras" aria-hidden={!volteada}><Reverso d={t} filas={filas} /></span>
+      </span>
     </span>
   );
 }
