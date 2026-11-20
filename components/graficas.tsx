@@ -36,6 +36,7 @@ function escala(max: number) {
 export function CurvaMes({ porDia, diaHoy, presupuestoMes }: { porDia: number[]; diaHoy: number; presupuestoMes: number }) {
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [foco, setFoco] = useState<number | null>(null);
+  const gid = useId().replace(/:/g, '');
   const dias = porDia.length;
   const acumulado: number[] = [];
   porDia.reduce((s, v, i) => ((acumulado[i] = s + v), s + v), 0);
@@ -90,8 +91,15 @@ export function CurvaMes({ porDia, diaHoy, presupuestoMes }: { porDia: number[];
         )}
         {hasta > 0 && (
           <>
-            <path className="area" d={area} />
+            <defs>
+              <linearGradient id={`g${gid}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" style={{ stopColor: 'var(--azul)', stopOpacity: 0.32 }} />
+                <stop offset="100%" style={{ stopColor: 'var(--azul)', stopOpacity: 0 }} />
+              </linearGradient>
+            </defs>
+            <path className="area" d={area} style={{ fill: `url(#g${gid})` }} />
             <path className="real" d={linea} pathLength={1} />
+            <circle className="pulso" cx={x(hasta)} cy={y(acumulado[hasta - 1])} r={4.5} />
             <circle className="punto" cx={x(hasta)} cy={y(acumulado[hasta - 1])} r={4.5} />
           </>
         )}
@@ -297,6 +305,74 @@ export function CurvaPatrimonio({ puntos }: { puntos: { fecha: string; activos: 
           <span>Patrimonio: {pesos(sel.activos - sel.deudas)}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mini curva (sparkline) para las fichas del resumen
+
+export function Chispa({ valores, color = 'var(--azul)', etiqueta }: { valores: number[]; color?: string; etiqueta: string }) {
+  const gid = useId().replace(/:/g, '');
+  const w = 120;
+  const h = 36;
+  if (valores.length < 2) return null;
+  const max = Math.max(...valores, 1);
+  const min = Math.min(...valores, 0);
+  const x = (i: number) => (i / (valores.length - 1)) * w;
+  const y = (v: number) => 3 + (h - 6) * (1 - (v - min) / (max - min || 1));
+  const linea = valores.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  return (
+    <svg className="chispa" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label={etiqueta}>
+      <defs>
+        <linearGradient id={`c${gid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.28 }} />
+          <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
+        </linearGradient>
+      </defs>
+      <path d={`${linea}L${w},${h}L0,${h}Z`} fill={`url(#c${gid})`} />
+      <path d={linea} fill="none" style={{ stroke: color }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Dona de categorías: el total en el centro; la lista de al lado es la leyenda
+
+export function Dona({ partes, total }: { partes: { nombre: string; valor: number; color: string }[]; total: number }) {
+  const [foco, setFoco] = useState<number | null>(null);
+  const r = 52;
+  const c = 2 * Math.PI * r;
+  const hueco = partes.length > 1 ? 3 : 0; // separación entre porciones, en px de arco
+  let acum = 0;
+  const f = foco !== null ? partes[foco] : null;
+  return (
+    <div className="dona">
+      <svg viewBox="0 0 140 140" role="img" aria-label={`Total gastado: ${pesos(total)}. ${partes.map((p) => `${p.nombre} ${Math.round((p.valor / total) * 100)} %`).join(', ')}`}>
+        <circle cx="70" cy="70" r={r} className="dona-fondo" />
+        {partes.map((p, i) => {
+          const largo = (p.valor / total) * c;
+          const desde = acum;
+          acum += largo;
+          return (
+            <circle
+              key={p.nombre}
+              cx="70" cy="70" r={r}
+              className={`dona-parte${foco === i ? ' on' : ''}`}
+              style={{ stroke: p.color, animationDelay: `${i * 60}ms` }}
+              strokeDasharray={`${Math.max(largo - hueco, 0.5)} ${c}`}
+              strokeDashoffset={-desde}
+              onPointerEnter={() => setFoco(i)}
+              onPointerLeave={() => setFoco(null)}
+            />
+          );
+        })}
+      </svg>
+      <div className="dona-centro" aria-hidden>
+        <small>{f ? f.nombre : 'Total'}</small>
+        <b className="num">{pesosCorto(f ? f.valor : total)}</b>
+        {f && <small>{Math.round((f.valor / total) * 100)} %</small>}
+      </div>
     </div>
   );
 }

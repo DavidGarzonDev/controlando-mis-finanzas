@@ -26,10 +26,13 @@ La billetera con la bandera y el recibo (`public/logo-*.png`, `app/icon.png`, `a
 ## Patrones
 
 - **Filas de libreta:** concepto · puntos · valor (`.fila` + `.puntos`).
-- **Bloques:** papel con borde fino, radio 16px, sin sombras apiladas.
+- **Bloques:** papel con radio 20px y sombras suaves en capas (sin bordes marcados); fondo con un brillo de colores (`.aurora`). En oscuro, azul noche.
+- **Resumen tipo bento:** la cifra del día en grande (degradado azul, o rojo si te pasaste) y cuatro fichas: Libre, Gastado (con mini curva y ↑↓ contra el mes pasado), Racha (los últimos 7 días) y Próximo pago.
+- **Paleta rápida (Ctrl+K):** escribir como en el bot (`almuerzo 15 mil con nu`) o saltar a cualquier sección o acción.
+- **Vacíos:** ícono en burbuja y una frase amable que dice qué hacer.
 - **Ventanas:** `<dialog>` nativo, se cierra tocando afuera o con Esc; en el celular sale desde abajo.
-- **Celular:** pestañas abajo y botón “+” redondo; en escritorio, dos columnas.
+- **Celular:** barra flotante abajo con el botón “+” en el centro. **Escritorio:** barra lateral fija (logo, buscador, secciones, Registrar).
 
 ## Movimiento
 
-Un momento principal por vista: el medidor se llena, la línea del mes se dibuja, las cifras cuentan hasta su valor y las filas entran escalonadas. Las tarjetas se inclinan con el dedo o el mouse. Todo se apaga con `prefers-reduced-motion`.
+Un momento principal por vista: el medidor se llena, la línea del mes se dibuja (con un punto que late en el día de hoy), la dona de categorías se arma, un brillo recorre las barras de progreso, las cifras cuentan hasta su valor y las filas entran escalonadas. Las tarjetas se inclinan con el dedo o el mouse. Todo se apaga con `prefers-reduced-motion`.

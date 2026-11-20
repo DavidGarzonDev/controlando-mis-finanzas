@@ -208,3 +208,26 @@ export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cue
   if (tipo === 'transferencia') await db.borrarTransferencia(id);
   refrescar();
 }
+
+// ---------------------------------------------------------------------------
+// Paleta rápida (Ctrl+K): escribir como en el bot, desde la página
+
+type BotonWeb = { texto: string; dato: string };
+
+/** Pasa el texto por el mismo intérprete del bot. Devuelve la respuesta (HTML simple) y, si hay, los botones. */
+export async function registrarTexto(texto: string): Promise<{ html: string; botones: BotonWeb[][] }> {
+  await listo();
+  const { manejarMensaje } = await import('@/lib/bot');
+  const r = await manejarMensaje(texto.slice(0, 300));
+  refrescar();
+  return typeof r === 'string' ? { html: r, botones: [] } : { html: r.texto, botones: r.botones };
+}
+
+/** Lo mismo que tocar un botón del bot (¿de qué cuenta salió?, ¿era $700 o $700.000?). */
+export async function tocarBoton(dato: string): Promise<{ html: string }> {
+  await listo();
+  const { procesarBoton } = await import('@/lib/bot');
+  const r = await procesarBoton(dato);
+  refrescar();
+  return { html: r?.linea || r?.aviso || 'Listo' };
+}

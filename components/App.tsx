@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { flushSync } from 'react-dom';
 import {
-  ArrowLeftRight, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, LayoutDashboard, WalletCards,
-  Lightbulb, Plus, Repeat, Send, TriangleAlert,
+  ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
+  ChartPie, ChartSpline, Lightbulb, ListChecks, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
 } from 'lucide-react';
 import { marcarFijo } from '@/app/actions';
 import type { Consejo, Nivel } from '@/lib/consejos';
@@ -14,12 +14,13 @@ import type {
 } from '@/lib/datos';
 import type { Hoy } from '@/lib/fechas';
 import { rachaLimite, type Reto } from '@/lib/retosComun';
-import { BarrasHistorial, Calendario, CurvaMes } from './graficas';
+import { BarrasHistorial, Calendario, Chispa, CurvaMes, Dona } from './graficas';
 import { Creditos } from './Creditos';
 import { Plan } from './Plan';
 import { Contador, conTransicion } from './animacion';
 import { BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
+import { Paleta } from './Paleta';
 import { COLOR_CAT, ICONO_CAT, claveDia, fechaCorta, hora, mesCortoDe, nombreMes, pesos } from './util';
 
 type Props = {
@@ -43,7 +44,20 @@ export default function App(p: Props) {
   const [tab, setTab] = useState<Tab>('resumen');
   const [editor, setEditor] = useState<Editor | null>(null);
   const [aviso, setAviso] = useState<{ texto: string; n: number } | null>(null);
+  const [paleta, setPaleta] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
+
+  // Ctrl+K (o ⌘K) abre la paleta rápida desde cualquier parte.
+  useEffect(() => {
+    const atajo = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaleta((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', atajo);
+    return () => window.removeEventListener('keydown', atajo);
+  }, []);
 
   // La pestaña vive en la URL (#deudas) para que el botón atrás y recargar funcionen.
   useEffect(() => {
@@ -73,7 +87,7 @@ export default function App(p: Props) {
 
   function teclaTabs(e: React.KeyboardEvent) {
     const i = TABS.findIndex((t) => t.id === tab);
-    const sig = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null;
+    const sig = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : null;
     if (sig === null) return;
     e.preventDefault();
     const t = TABS[(sig + TABS.length) % TABS.length];
@@ -83,18 +97,23 @@ export default function App(p: Props) {
 
   const hoyClave = `${p.hoy.anio}-${String(p.hoy.mes).padStart(2, '0')}-${String(p.hoy.dia).padStart(2, '0')}`;
 
+  const titulo = TABS.find((t) => t.id === tab)?.label ?? 'Resumen';
+
   return (
     <div className="app">
+      <div className="aurora" aria-hidden />
       <div className="franja-colombia" aria-hidden />
-      <header className="barra">
+
+      {/* Escritorio: barra lateral fija. Celular: la navegación baja y "Registrar" queda como botón redondo en el centro. */}
+      <aside className="lateral">
         <div className="marca">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="marca-logo" src="/logo-192.png" alt="" width={44} height={44} />
-          <div>
-            <h1>Mis Finanzas</h1>
-            <SelectorMes mes={p.mes} meses={p.meses} tab={tab} />
-          </div>
+          <img className="marca-logo" src="/logo-192.png" alt="" width={40} height={40} />
+          <span className="marca-nombre">Mis Finanzas</span>
         </div>
+        <button className="buscador solo-escritorio" onClick={() => setPaleta(true)}>
+          <Search size={17} aria-hidden /> <span>Buscar o registrar</span> <kbd>Ctrl K</kbd>
+        </button>
         <nav className="tabs" role="tablist" aria-label="Secciones" ref={tabsRef} onKeyDown={teclaTabs}>
           {TABS.map(({ id, label, Icono }) => (
             <button
@@ -113,31 +132,51 @@ export default function App(p: Props) {
             </button>
           ))}
         </nav>
-        <BotonTema avisar={avisar} />
-        <button className="btn primario registrar" aria-label="Registrar" onClick={() => setEditor({ tipo: 'nuevo', modo: 'gasto' })}>
-          <Plus size={20} aria-hidden /> <span>Registrar</span>
-        </button>
-      </header>
+        <div className="lateral-pie">
+          <button className="btn primario registrar" aria-label="Registrar" onClick={() => setEditor({ tipo: 'nuevo', modo: 'gasto' })}>
+            <Plus size={22} aria-hidden /> <span>Registrar</span>
+          </button>
+          <p className="lateral-tip solo-escritorio">
+            <Send size={14} aria-hidden /> También por Telegram: <code>almuerzo 15 mil</code>
+          </p>
+        </div>
+      </aside>
 
-      {!p.resumen.esActual && (
-        <p className="aviso-mes">
-          Estás viendo <b>{nombreMes(Number(p.mes.slice(5)))} {p.mes.slice(0, 4)}</b>.{' '}
-          <a href={`/${tab === 'resumen' ? '' : `#${tab}`}`}>Volver a este mes</a>
-        </p>
-      )}
+      <div className="contenido">
+        <header className="barra">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="marca-logo solo-movil" src="/logo-192.png" alt="" width={36} height={36} />
+          <div className="barra-titulo">
+            <h1>{titulo}</h1>
+            <SelectorMes mes={p.mes} meses={p.meses} tab={tab} />
+          </div>
+          <button className="btn icono-tema solo-movil" aria-label="Buscar o registrar" onClick={() => setPaleta(true)}>
+            <Search size={20} aria-hidden />
+          </button>
+          <BotonTema avisar={avisar} />
+        </header>
 
-      <main id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="panel" key={`${tab}-${p.mes}`}>
-        {tab === 'resumen' && <Resumen {...p} abrir={setEditor} ir={ir} avisar={avisar} />}
-        {tab === 'movimientos' && (
-          <Movimientos gastos={p.gastos} ingresos={p.ingresos} transferencias={p.transferencias} cuentas={p.cuentas} r={p.resumen} mes={p.mes} hoyClave={hoyClave} abrir={setEditor} />
+        {!p.resumen.esActual && (
+          <p className="aviso-mes">
+            Estás viendo <b>{nombreMes(Number(p.mes.slice(5)))} {p.mes.slice(0, 4)}</b>.{' '}
+            <a href={`/${tab === 'resumen' ? '' : `#${tab}`}`}>Volver a este mes</a>
+          </p>
         )}
-        {tab === 'billetera' && (
-          <Creditos deudas={p.deudas} cuentas={p.cuentas} r={p.resumen} mov={p.movCredito} patrimonio={p.patrimonio} hoyClave={hoyClave} abrir={setEditor} />
-        )}
-        {tab === 'plan' && <Plan fijos={p.fijos} metas={p.metas} retos={p.retos} r={p.resumen} mes={p.mes} abrir={setEditor} avisar={avisar} />}
-      </main>
+
+        <main id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="panel" key={`${tab}-${p.mes}`}>
+          {tab === 'resumen' && <Resumen {...p} abrir={setEditor} ir={ir} avisar={avisar} />}
+          {tab === 'movimientos' && (
+            <Movimientos gastos={p.gastos} ingresos={p.ingresos} transferencias={p.transferencias} cuentas={p.cuentas} r={p.resumen} mes={p.mes} hoyClave={hoyClave} abrir={setEditor} />
+          )}
+          {tab === 'billetera' && (
+            <Creditos deudas={p.deudas} cuentas={p.cuentas} r={p.resumen} mov={p.movCredito} patrimonio={p.patrimonio} hoyClave={hoyClave} abrir={setEditor} />
+          )}
+          {tab === 'plan' && <Plan fijos={p.fijos} metas={p.metas} retos={p.retos} r={p.resumen} mes={p.mes} abrir={setEditor} avisar={avisar} />}
+        </main>
+      </div>
 
       {editor && <Modal editor={editor} cuentas={p.cuentas} metas={p.metas} r={p.resumen} cerrar={() => setEditor(null)} avisar={avisar} />}
+      <Paleta abierta={paleta} cerrar={() => setPaleta(false)} ir={ir} abrir={setEditor} mes={p.mes} />
 
       <div className="aviso-zona" aria-live="polite">
         {aviso && (
@@ -153,17 +192,23 @@ export default function App(p: Props) {
 // ===========================================================================
 // Resumen
 
-function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes, metas, hormiga, suscripciones, abrir, ir, avisar }: Props & {
+function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes, metas, hormiga, suscripciones, patrimonio, abrir, ir, avisar }: Props & {
   abrir: (e: Editor) => void; ir: (t: Tab) => void; avisar: (m: string) => void;
 }) {
   const presupuestoMes = Math.max(0, r.ingresos - r.cuotas - r.fijos - r.extraAbonos - r.ahorro);
   const limiteDiario = presupuestoMes / r.diasMes;
   const [anio, numMes] = mes.split('-').map(Number);
+  const limiteRacha = limiteDiario > 0 && r.modo === 'mes' ? limiteDiario : r.presupuestoHoy;
 
   return (
+    <div className="resumen">
+      {r.esActual ? (
+        <Bento r={r} porDia={porDia} historial={historial} patrimonio={patrimonio} limite={limiteRacha} abrir={abrir} ir={ir} />
+      ) : (
+        <CierreMes r={r} />
+      )}
     <div className="rejilla">
       <div className="col-principal">
-        {r.esActual ? <Medidor r={r} abrir={abrir} racha={rachaLimite(porDia, limiteDiario > 0 && r.modo === 'mes' ? limiteDiario : r.presupuestoHoy, r.diaHoy)} /> : <CierreMes r={r} />}
 
         <section className="bloque" aria-labelledby="t-mes">
           <div className="bloque-cab">
@@ -176,7 +221,7 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
           {r.variables > 0 || presupuestoMes > 0 ? (
             <CurvaMes porDia={porDia} diaHoy={r.diaHoy} presupuestoMes={presupuestoMes} />
           ) : (
-            <Vacio>Cuando registres gastos verás aquí cómo avanzas contra lo que te alcanza.</Vacio>
+            <Vacio icono="grafica">Cuando registres gastos verás aquí cómo avanzas contra lo que te alcanza.</Vacio>
           )}
         </section>
 
@@ -291,10 +336,90 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
           {historial.some((h) => h.ingresos || h.gastos) ? (
             <BarrasHistorial historial={historial} />
           ) : (
-            <Vacio>Aquí verás cada mes lo que te entró contra lo que gastaste.</Vacio>
+            <Vacio icono="grafica">Aquí verás cada mes lo que te entró contra lo que gastaste.</Vacio>
           )}
         </section>
       </aside>
+    </div>
+    </div>
+  );
+}
+
+/**
+ * Resumen tipo bento: la cifra del día grande y, al lado, cuatro fichas con lo que más se mira.
+ * Cada ficha lleva su tendencia (mini curva, flecha o puntos) para leerla de un vistazo.
+ */
+function Bento({ r, porDia, historial, patrimonio, limite, abrir, ir }: {
+  r: TResumen; porDia: number[]; historial: MesHistorial[]; patrimonio: PuntoPatrimonio[]; limite: number;
+  abrir: (e: Editor) => void; ir: (t: Tab) => void;
+}) {
+  const racha = rachaLimite(porDia, limite, r.diaHoy);
+  const pago = r.proximoPago;
+
+  // Gastado: acumulado día a día y comparación con el ritmo del mes pasado al mismo día
+  const acumulado: number[] = [];
+  porDia.slice(0, r.diaHoy).reduce((s, v, i) => ((acumulado[i] = s + v), s + v), 0);
+  const anterior = historial.length >= 2 ? historial[historial.length - 2] : null;
+  const diasAnt = anterior ? new Date(Number(anterior.mes.slice(0, 4)), Number(anterior.mes.slice(5)), 0).getDate() : 30;
+  const ritmoAnt = anterior?.gastos ? (anterior.gastos / diasAnt) * r.diaHoy : 0;
+  const cambio = ritmoAnt > 0 ? (r.variables - ritmoAnt) / ritmoAnt : null;
+
+  // Libre: si llevas cuentas, cómo ha ido lo que tienes en ellas
+  const enCuentas = patrimonio.slice(-30).map((x) => x.activos);
+
+  // Racha: los últimos 7 días, cumplido o no
+  const semana = Array.from({ length: 7 }, (_, i) => r.diaHoy - 7 + i).map((d) =>
+    d < 1 ? null : d === r.diaHoy ? 'hoy' : limite > 0 && (porDia[d - 1] ?? 0) <= limite ? 'si' : 'no',
+  );
+
+  // Próximo pago: cuánto del periodo ya pasó
+  const totalPeriodo = Math.max(pago.dias, 15);
+  const avance = Math.min(1, Math.max(0, 1 - pago.dias / totalPeriodo));
+
+  return (
+    <div className="bento">
+      <Medidor r={r} abrir={abrir} />
+
+      <button className="ficha" onClick={() => ir('billetera')} aria-label={`Libre: ${pesos(r.disponible)}. Ver billetera`}>
+        <span className="ficha-cab"><span className="ficha-ico azul" aria-hidden><WalletCards size={16} /></span> Libre</span>
+        <b className={`ficha-cifra num ${r.disponible < 0 ? 'neg' : ''}`}><Contador valor={r.disponible} /></b>
+        <span className="ficha-sub">
+          {r.modo === 'cuentas' ? <>En cuentas <b className="num">{pesos(r.enCuentas)}</b> · por pagar <b className="num">{pesos(r.totalPendiente)}</b></> : <>Entró <b className="num">{pesos(r.ingresos)}</b> este mes</>}
+        </span>
+        {enCuentas.length >= 2 && <Chispa valores={enCuentas} etiqueta="Lo que tienes en cuentas, últimos días" />}
+      </button>
+
+      <button className="ficha" onClick={() => ir('movimientos')} aria-label={`Gastado este mes: ${pesos(r.variables)}. Ver movimientos`}>
+        <span className="ficha-cab"><span className="ficha-ico violeta" aria-hidden><ArrowLeftRight size={16} /></span> Gastado</span>
+        <b className="ficha-cifra num"><Contador valor={r.variables} /></b>
+        <span className="ficha-sub">
+          {cambio === null ? (
+            <>Ritmo de <b className="num">{pesos(r.ritmo7)}</b> al día</>
+          ) : (
+            <span className={`tendencia ${cambio > 0.05 ? 'sube' : cambio < -0.05 ? 'baja' : ''}`}>
+              {cambio > 0.05 ? <TrendingUp size={14} aria-hidden /> : cambio < -0.05 ? <TrendingDown size={14} aria-hidden /> : <Minus size={14} aria-hidden />}
+              {Math.abs(cambio) <= 0.05 ? 'Igual que el mes pasado' : `${Math.round(Math.abs(cambio) * 100)} % ${cambio > 0 ? 'más' : 'menos'} que el mes pasado`}
+            </span>
+          )}
+        </span>
+        {acumulado.length >= 2 && <Chispa valores={acumulado} color="var(--s7)" etiqueta="Gasto acumulado del mes" />}
+      </button>
+
+      <button className="ficha" onClick={() => ir('plan')} aria-label={`Racha: ${racha} días sin pasarte. Ver retos`}>
+        <span className="ficha-cab"><span className="ficha-ico ambar" aria-hidden><Flame size={16} /></span> Racha</span>
+        <b className="ficha-cifra num">{racha} <small>{racha === 1 ? 'día' : 'días'}</small></b>
+        <span className="ficha-sub">{racha >= 2 ? 'Seguidos sin pasarte del límite 🔥' : racha === 1 ? 'Ayer cumpliste. ¡Sigue hoy!' : 'Cumple el límite de hoy y arrancas'}</span>
+        <span className="semana" aria-hidden>
+          {semana.map((e, i) => <i key={i} className={e ?? 'nada'} />)}
+        </span>
+      </button>
+
+      <div className="ficha">
+        <span className="ficha-cab"><span className="ficha-ico verde" aria-hidden><CalendarDays size={16} /></span> Próximo pago</span>
+        <b className="ficha-cifra">{pago.dia} de {mesCortoDe(pago.mes)}</b>
+        <span className="ficha-sub">{pago.dias === 0 ? '¡Es hoy! 💸' : `En ${pago.dias} ${pago.dias === 1 ? 'día' : 'días'}`}</span>
+        <span className="barra-prog brillo" aria-hidden><span style={{ width: `${avance * 100}%` }} /></span>
+      </div>
     </div>
   );
 }
@@ -315,7 +440,7 @@ function CierreMes({ r }: { r: TResumen }) {
   );
 }
 
-function Medidor({ r, abrir, racha = 0 }: { r: TResumen; abrir: (e: Editor) => void; racha?: number }) {
+function Medidor({ r, abrir }: { r: TResumen; abrir: (e: Editor) => void }) {
   const pago = r.proximoPago;
   const fechaPago = `${pago.dia} de ${mesCortoDe(pago.mes)}`;
 
@@ -344,7 +469,6 @@ function Medidor({ r, abrir, racha = 0 }: { r: TResumen; abrir: (e: Editor) => v
             ? `Tienes ${pesos(r.enCuentas)} y te falta pagar ${pesos(r.totalPendiente)} este mes${r.apartadoMetas ? ` (más ${pesos(r.apartadoMetas)} apartados en metas)` : ''}. Hasta el ${fechaPago} gasta solo en lo necesario.`
             : `Lo que debes pagar y lo que has gastado ya supera lo que te ha entrado. Hasta el ${fechaPago} gasta solo en lo necesario.`}
         </p>
-        <Datos r={r} fechaPago={fechaPago} />
       </section>
     );
   }
@@ -353,10 +477,14 @@ function Medidor({ r, abrir, racha = 0 }: { r: TResumen; abrir: (e: Editor) => v
   const queda = limite - r.gastadoHoy;
   const ratio = limite > 0 ? Math.min(r.gastadoHoy / limite, 1) : r.gastadoHoy > 0 ? 1 : 0;
   const estado = queda < 0 ? 'sobre' : ratio > 0.8 ? 'cerca' : 'bien';
+  const animo = r.gastadoHoy === 0 ? 'Aún no gastas nada hoy 👌' : queda >= 0 && ratio < 0.5 ? '¡Vas muy bien hoy! 🎉' : null;
 
   return (
     <section className={`medidor ${estado}`} aria-labelledby="t-hoy">
-      <p className="medidor-etiqueta" id="t-hoy">Hoy puedes gastar <span className="medidor-hasta">· hasta el {fechaPago} ({pago.dias} {pago.dias === 1 ? 'día' : 'días'})</span></p>
+      <div className="medidor-arriba">
+        <p className="medidor-etiqueta" id="t-hoy">Hoy puedes gastar <span className="medidor-hasta">· hasta el {fechaPago} ({pago.dias} {pago.dias === 1 ? 'día' : 'días'})</span></p>
+        {animo && <span className="animo">{animo}</span>}
+      </div>
       <p className="medidor-cifra num"><Contador valor={limite} /></p>
       <div
         className="medidor-pista"
@@ -377,11 +505,7 @@ function Medidor({ r, abrir, racha = 0 }: { r: TResumen; abrir: (e: Editor) => v
           <span className="neg"><TriangleAlert size={16} aria-hidden /> Te pasaste <b className="num">{pesos(-queda)}</b></span>
         )}
       </div>
-      <Datos r={r} fechaPago={fechaPago} />
       <Proyeccion r={r} />
-      {racha >= 2 && (
-        <p className="racha"><span aria-hidden>🔥</span> {racha} días seguidos sin pasarte del límite</p>
-      )}
     </section>
   );
 }
@@ -397,30 +521,13 @@ function Proyeccion({ r }: { r: TResumen }) {
   );
 }
 
-function Datos({ r, fechaPago }: { r: TResumen; fechaPago: string }) {
-  return (
-    <dl className="datos">
-      {r.modo === 'cuentas' ? (
-        <>
-          <div><dt>Libre</dt><dd className="num"><Contador valor={r.disponible} /></dd></div>
-          <div><dt>En cuentas</dt><dd className="num">{pesos(r.enCuentas)}</dd></div>
-          <div><dt>Por pagar este mes</dt><dd className="num">{pesos(r.totalPendiente)}</dd></div>
-        </>
-      ) : (
-        <>
-          <div><dt>Libre en el mes</dt><dd className="num"><Contador valor={r.disponible} /></dd></div>
-          <div><dt>Próximo pago</dt><dd>{fechaPago} <small>· en {r.proximoPago.dias} {r.proximoPago.dias === 1 ? 'día' : 'días'}</small></dd></div>
-          <div><dt>Ingresos del mes</dt><dd className="num">{pesos(r.ingresos)}</dd></div>
-        </>
-      )}
-    </dl>
-  );
-}
-
 function Categorias({ r }: { r: TResumen }) {
-  if (!r.porCategoria.length) return <Vacio>Aún no hay gastos este mes. Cada gasto se clasifica solo: comida, transporte, salidas…</Vacio>;
+  if (!r.porCategoria.length) return <Vacio icono="cats">Aún no hay gastos este mes. Cada gasto se clasifica solo: comida, transporte, salidas…</Vacio>;
   const max = Math.max(...r.porCategoria.map((c) => c.total), ...r.porCategoriaMesAnterior.map((c) => c.total), ...Object.values(r.topes));
+  const partes = r.porCategoria.map((c) => ({ nombre: c.categoria, valor: c.total, color: COLOR_CAT[c.categoria] ?? 'var(--s-otros)' }));
   return (
+    <div className="cats-con-dona">
+    <Dona partes={partes} total={r.porCategoria.reduce((s, c) => s + c.total, 0)} />
     <ul className="cats">
       {r.porCategoria.map((c) => {
         const Icono = ICONO_CAT[c.categoria] ?? ICONO_CAT.Otros;
@@ -447,6 +554,7 @@ function Categorias({ r }: { r: TResumen }) {
         );
       })}
     </ul>
+    </div>
   );
 }
 
@@ -455,7 +563,7 @@ const NOMBRE_NIVEL: Record<Nivel, string> = { alerta: 'Urgente', aviso: 'Atenci�
 
 function Consejos({ consejos }: { consejos: Consejo[] }) {
   const [todos, setTodos] = useState(false);
-  if (!consejos.length) return <Vacio>Todo en orden por ahora. A medida que registres movimientos te daré ideas.</Vacio>;
+  if (!consejos.length) return <Vacio icono="ideas">Todo en orden por ahora ✨ A medida que registres movimientos te daré ideas.</Vacio>;
   const visibles = todos ? consejos : consejos.slice(0, 3);
   return (
     <>
@@ -488,7 +596,7 @@ function Pendientes({ r, deudas, mes, abrir, avisar, ir }: {
   const [pendiente, iniciar] = useTransition();
   const [hecho, setHecho] = useState<string | null>(null);
   if (!r.pendientes.length) {
-    return <Vacio>{r.cuotas + r.fijos > 0 ? 'Ya pagaste todas las cuotas y fijos de este mes.' : <>Agrega tus <button className="enlace" onClick={() => ir('plan')}>gastos fijos</button> y <button className="enlace" onClick={() => ir('billetera')}>créditos</button> para saber qué te falta pagar.</>}</Vacio>;
+    return <Vacio icono={r.cuotas + r.fijos > 0 ? 'listo' : 'lista'}>{r.cuotas + r.fijos > 0 ? '¡Al día! Ya pagaste todas las cuotas y fijos de este mes 🎉' : <>Agrega tus <button className="enlace" onClick={() => ir('plan')}>gastos fijos</button> y <button className="enlace" onClick={() => ir('billetera')}>créditos</button> para saber qué te falta pagar.</>}</Vacio>;
   }
   function pagar(p: Pendiente) {
     if (p.tipo === 'cuota') {
@@ -654,7 +762,7 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
           );
         })
       ) : (
-        <Vacio>
+        <Vacio icono={busqueda ? 'buscar' : 'bot'}>
           {busqueda ? 'No hay movimientos que coincidan con la búsqueda.' : filtro === 'ingresos' ? 'Sin ingresos este mes. Escríbele al bot me pagaron 1100000.' : 'Sin movimientos este mes. Escríbele al bot almuerzo 15 mil o toca Registrar.'}
         </Vacio>
       )}
@@ -679,10 +787,14 @@ function FilaGasto({ g, sub, abrir }: { g: Gasto; sub: string; abrir: (e: Editor
   );
 }
 
-export function Vacio({ children }: { children: React.ReactNode }) {
+const ICONO_VACIO = { bot: Send, grafica: ChartSpline, listo: PartyPopper, buscar: SearchX, cats: ChartPie, ideas: Sparkles, lista: ListChecks } as const;
+
+/** Estado vacío: un ícono en burbuja y una frase amable que dice qué hacer. */
+export function Vacio({ children, icono = 'bot' }: { children: React.ReactNode; icono?: keyof typeof ICONO_VACIO }) {
+  const Icono = ICONO_VACIO[icono];
   return (
-    <div className="vacio-caja">
-      <Send size={18} aria-hidden />
+    <div className={`vacio-caja v-${icono}`}>
+      <span className="vacio-burbuja" aria-hidden><Icono size={22} /></span>
       <p>{children}</p>
     </div>
   );
