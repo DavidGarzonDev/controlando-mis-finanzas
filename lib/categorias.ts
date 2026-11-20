@@ -29,6 +29,12 @@ export function sinTildes(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
+/**
+ * Palabras que dicen DÓNDE fue el gasto, no QUÉ se compró ("gatorade en el gym").
+ * Solo deciden la categoría si no hay otra palabra más concreta.
+ */
+export const PALABRAS_CONTEXTO = new Set(['gym', 'gimnasio', 'casa', 'calle', 'oficina', 'universidad', 'u', 'trabajo', 'tienda', 'exito', 'd1', 'ara']);
+
 /** Palabras clave base (sin tildes, en minúscula). El bot aprende más con /cat. */
 export const PALABRAS_BASE: Record<string, Categoria> = {
   // Comida
@@ -37,6 +43,15 @@ export const PALABRAS_BASE: Record<string, Categoria> = {
   pan: 'Comida', panaderia: 'Comida', cafe: 'Comida', tinto: 'Comida', gaseosa: 'Comida',
   pizza: 'Comida', hamburguesa: 'Comida', perro: 'Comida', pollo: 'Comida', frutas: 'Comida',
   fruta: 'Comida', tienda: 'Comida', d1: 'Comida', ara: 'Comida', exito: 'Comida', rappi: 'Comida',
+  // Bebidas y snacks
+  gatorade: 'Comida', powerade: 'Comida', cocacola: 'Comida', coca: 'Comida', pony: 'Comida', malta: 'Comida',
+  postobon: 'Comida', redbull: 'Comida', monster: 'Comida', energizante: 'Comida', bebida: 'Comida', refresco: 'Comida',
+  galletas: 'Comida', galleta: 'Comida', papas: 'Comida', chocolatina: 'Comida', chocolate: 'Comida', mani: 'Comida',
+  yogurt: 'Comida', leche: 'Comida', huevos: 'Comida', buñuelo: 'Comida', bunuelo: 'Comida', pandebono: 'Comida',
+  almojabana: 'Comida', salchipapa: 'Comida', perro_caliente: 'Comida', jugos: 'Comida', cafeteria: 'Comida', restaurante: 'Comida',
+  proteina: 'Salud', vitaminas: 'Salud',
+  // Hogar (aseo y casa)
+  shampoo: 'Hogar', papel: 'Hogar', escoba: 'Hogar', trapero: 'Hogar', cloro: 'Hogar', suavizante: 'Hogar',
   domicilio: 'Comida', helado: 'Comida', jugo: 'Comida', agua: 'Comida', snack: 'Comida',
   // Transporte
   gasolina: 'Transporte', tanqueo: 'Transporte', tanquear: 'Transporte', bus: 'Transporte',

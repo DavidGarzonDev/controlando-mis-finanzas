@@ -1,4 +1,4 @@
-import { PALABRAS_BASE, sinTildes, type Categoria } from './categorias';
+import { PALABRAS_BASE, PALABRAS_CONTEXTO, sinTildes, type Categoria } from './categorias';
 
 export type Interpretado = {
   tipo: 'gasto' | 'ingreso';
@@ -94,6 +94,8 @@ function limpiarConcepto(resto: string): string {
 export function adivinarCategoria(texto: string, aprendidas: Record<string, Categoria> = {}): Categoria | null {
   const palabras = sinTildes(texto.toLowerCase()).split(/[^\p{L}\d]+/u).filter(Boolean);
   for (const p of palabras) if (aprendidas[p]) return aprendidas[p];
+  // Primero lo que se compró ("gatorade"), y solo si no hay, dónde ("gym", "tienda").
+  for (const p of palabras) if (PALABRAS_BASE[p] && !PALABRAS_CONTEXTO.has(p)) return PALABRAS_BASE[p];
   for (const p of palabras) if (PALABRAS_BASE[p]) return PALABRAS_BASE[p];
   return null;
 }
