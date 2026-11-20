@@ -138,6 +138,7 @@ Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cua
 | `/metas` | Cómo vas con cada meta |
 | `/tope salidas 150000` / `/topes` | Tope mensual por categoría; te aviso al llegar al 80 % |
 | `/suscripciones` / `/hormiga` | Pagos que se repiten / gastos pequeños que se acumulan |
+| `/retos` / `/reto domicilios` | Retos: semana sin domicilios, semana sin salidas, 7 días sin pasarte del límite, 3 días sin gastar. El bot te avisa si se rompe o si lo logras |
 
 **Notas de voz y fotos:** mándale al bot una nota de voz ("almuerzo quince mil y gasolina cuarenta") o la foto de un recibo, y Gemini la convierte en texto.
 

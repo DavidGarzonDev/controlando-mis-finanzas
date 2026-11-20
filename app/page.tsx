@@ -3,6 +3,7 @@ import * as db from '@/lib/datos';
 import { generarConsejos } from '@/lib/consejos';
 import { asegurarEsquema } from '@/lib/esquema';
 import { hoyEnColombia, mesClave } from '@/lib/fechas';
+import { retos as cargarRetos } from '@/lib/retos';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
   const esActual = mes === mesClave();
   if (esActual) await db.registrarPatrimonio().catch(() => {});
 
-  const [resumen, gastos, ingresos, deudas, fijos, porDia, historial, movCredito, cuentas, metas, transferencias, hormiga, suscripciones, patrimonio, meses] =
+  const [resumen, gastos, ingresos, deudas, fijos, porDia, historial, movCredito, cuentas, metas, transferencias, hormiga, suscripciones, patrimonio, meses, retos] =
     await Promise.all([
       db.resumen(mes),
       db.gastosDelMes(mes),
@@ -29,6 +30,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
       db.suscripciones(),
       db.historialPatrimonio(180),
       db.mesesConDatos(),
+      cargarRetos(),
     ]);
 
   return (
@@ -49,6 +51,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
       hormiga={hormiga}
       suscripciones={suscripciones}
       patrimonio={patrimonio}
+      retos={retos}
       consejos={generarConsejos(resumen, deudas, fijos, { metas, hormiga, suscripciones })}
       hoy={hoyEnColombia()}
     />

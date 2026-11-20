@@ -78,6 +78,12 @@ const SENTENCIAS = [
        INSERT INTO migraciones (id) VALUES ('cuota_sin_compras');
      END IF;
    END $$`,
+  // Retos: semana sin domicilios, días sin pasarte del límite, días sin gastar…
+  `CREATE TABLE IF NOT EXISTS retos (
+    id SERIAL PRIMARY KEY, tipo TEXT NOT NULL, nombre TEXT NOT NULL, inicio DATE NOT NULL,
+    dias INTEGER NOT NULL DEFAULT 7, regla TEXT, monto INTEGER,
+    estado TEXT NOT NULL DEFAULT 'activo', avisado BOOLEAN NOT NULL DEFAULT false,
+    creado TIMESTAMPTZ NOT NULL DEFAULT now())`,
   // Foto diaria de lo que tienes y lo que debes
   `CREATE TABLE IF NOT EXISTS patrimonio_diario (fecha DATE PRIMARY KEY, activos INTEGER NOT NULL, deudas INTEGER NOT NULL)`,
   // Para no mandar el mismo recordatorio dos veces el mismo día

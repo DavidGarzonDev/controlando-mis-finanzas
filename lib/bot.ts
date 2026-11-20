@@ -2,6 +2,7 @@ import { CATEGORIAS, normalizarCategoria, sinTildes } from './categorias';
 import { extraerMonto, interpretar } from './parser';
 import { interpretarConIA } from './gemini';
 import { generarConsejos, simularPago, tasaMensual } from './consejos';
+import { CATALOGO, crearReto, retos as cargarRetos, retosParaAvisar } from './retos';
 import { asegurarEsquema } from './esquema';
 import * as db from './datos';
 import { esc, pesos, type Boton } from './telegram';
@@ -35,6 +36,7 @@ Y lo que te entra, venga de donde venga:
 • <code>pagué la cuota de la AV Villas</code> · <code>pagué 200 mil a la Nu</code>
 /tarjetas — cupo disponible de cada tarjeta
 /intereses — cuánto pagarás en intereses y cuánto te ahorras abonando a capital
+/retos — tus retos · /reto domicilios — semana sin domicilios (también: salidas, limite, cero)
 
 <b>Cuentas, topes y metas</b>
 • <code>almuerzo 15 mil con nequi</code> — el gasto sale de esa cuenta
@@ -126,6 +128,10 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
     case '/yapague':
     case '/yapagué':
       return yaPague(args);
+    case '/retos':
+      return textoRetos();
+    case '/reto':
+      return empezarReto(args);
     case '/intereses':
       return textoIntereses();
     case '/tope':
@@ -296,6 +302,11 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
     );
   }
   if (categoria === 'Otros') lineas.push('¿Categoría equivocada? Corrígela con /cat Comida (o la que sea).');
+  for (const x of await retosParaAvisar()) {
+    lineas.push(x.estado === 'roto'
+      ? `💔 Se rompió tu reto <b>${esc(x.nombre)}</b> (ibas ${x.cumplidos} de ${x.meta}). ¡Vuelve a intentarlo con /reto!`
+      : `🏆 ¡Lograste tu reto <b>${esc(x.nombre)}</b>!`);
+  }
   const botones = [...(preguntaMonto ? botonesMonto('g', idGasto, preguntaMonto) : []), ...(preguntar ? botonesCuentas('g', idGasto, todas) : [])];
   const preguntas = [preguntaMonto ? textoPreguntaMonto(preguntaMonto) : '', preguntar ? '¿De dónde salió?' : ''].filter(Boolean);
   if (botones.length) return { texto: [...lineas, ...preguntas].join('\n'), botones };
@@ -862,4 +873,25 @@ async function textoIntereses(): Promise<string> {
     );
   }
   return `<b>💸 Si sigues pagando lo mismo</b>\n${lineas.join('\n')}\n\n<b>Total en intereses: ${pesos(total)}</b>\nPara abonar a capital: <code>abono a capital nu 100 mil</code>`;
+}
+
+async function textoRetos(): Promise<string> {
+  const rs = await cargarRetos();
+  const activos = rs.filter((x) => x.estado === 'activo');
+  const lineas = activos.length
+    ? activos.map((x) => `🔥 <b>${esc(x.nombre)}</b>: ${'●'.repeat(x.cumplidos)}${'○'.repeat(Math.max(0, x.meta - x.cumplidos))} · ${esc(x.detalle)}`)
+    : ['No tienes retos activos.'];
+  const opciones = CATALOGO.filter((c) => !activos.some((a) => a.nombre === c.nombre)).map((c) => `<code>/reto ${c.clave}</code> — ${esc(c.nombre)}`);
+  return `<b>🎯 Tus retos</b>\n${lineas.join('\n')}${opciones.length ? `\n\nEmpieza uno:\n${opciones.join('\n')}` : ''}`;
+}
+
+async function empezarReto(args: string): Promise<string> {
+  const clave = normal(args).replace(/^(semana sin|sin)\s+/, '').split(' ')[0];
+  const c = CATALOGO.find((x) => x.clave === clave || normal(x.nombre).includes(normal(args)));
+  if (!c) return `¿Cuál reto? ${CATALOGO.map((x) => `<code>/reto ${x.clave}</code>`).join(' · ')}`;
+  const r = await db.resumen();
+  const limite = r.presupuestoHoy > 0 ? r.presupuestoHoy : Math.max(10_000, r.ritmo7 * 0.8);
+  await crearReto(c.clave, limite);
+  const extra = c.tipo === 'limite' ? ` Tu límite: ${pesos(Math.max(1000, Math.round(limite / 1000) * 1000))} por día.` : '';
+  return `🔥 ¡Empezó tu reto <b>${esc(c.nombre)}</b>! ${esc(c.descripcion)}.${extra} Te aviso si se rompe o cuando lo logres.`;
 }

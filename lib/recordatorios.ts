@@ -3,6 +3,8 @@ import { hoyEnColombia } from './fechas';
 import { sql } from './db';
 import * as db from './datos';
 import { esc, pesos } from './telegram';
+import { rachaLimite } from './retosComun';
+import { retos as cargarRetos } from './retos';
 
 /** "30" en un mes de 28 días cae el 28. */
 const diaReal = (dia: number, diasMes: number) => Math.min(dia, diasMes);
@@ -71,8 +73,18 @@ export async function mensajeDelDia(): Promise<string | null> {
     );
   }
 
+  // 5) Rachas y retos
+  const porDia = await db.gastosPorDia();
+  const racha = rachaLimite(porDia, r.presupuestoHoy, h.dia);
+  const activos = (await cargarRetos()).filter((x) => x.estado === 'activo');
+  const lineasRetos = [
+    racha >= 2 ? `🔥 Llevas <b>${racha} días</b> seguidos sin pasarte del límite. ¡No rompas la racha!` : '',
+    ...activos.map((x) => `🎯 ${esc(x.nombre)}: ${x.cumplidos} de ${x.meta}${x.tipo === 'sin' ? ' días' : ''} · ${esc(x.detalle)}`),
+  ].filter(Boolean);
+  if (lineasRetos.length) bloques.push(lineasRetos.join('\n'));
+
   // Solo mandamos algo si hay un aviso real (el "cómo vas" solo no justifica escribirte… salvo en quincena).
-  const hayAviso = esDiaDePago || vencen.length > 0 || cortes.length > 0;
+  const hayAviso = esDiaDePago || vencen.length > 0 || cortes.length > 0 || activos.length > 0 || racha >= 3;
   return hayAviso ? bloques.join('\n\n') : null;
 }
 

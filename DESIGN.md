@@ -21,7 +21,7 @@ La billetera con la bandera y el recibo (`public/logo-*.png`, `app/icon.png`, `a
 
 ## Tipografía
 
-Fuente del sistema. Cifras con `tabular-nums`. Escala corta: 0.76 / 0.86 / 1 / 1.2 rem; el número del día va entre 2.75 y 4.25 rem.
+**Manrope** (variable, empaquetada con la app vía `@fontsource-variable/manrope`; no depende de Google Fonts). Cifras con `tabular-nums`. Escala corta: 0.76 / 0.86 / 1 / 1.2 rem; el número del día va entre 2.75 y 4.25 rem.
 
 ## Patrones
 

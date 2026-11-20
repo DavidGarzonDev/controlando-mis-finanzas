@@ -13,6 +13,7 @@ import type {
   Suscripcion, Transferencia,
 } from '@/lib/datos';
 import type { Hoy } from '@/lib/fechas';
+import { rachaLimite, type Reto } from '@/lib/retosComun';
 import { BarrasHistorial, Calendario, CurvaMes } from './graficas';
 import { Creditos } from './Creditos';
 import { Plan } from './Plan';
@@ -27,6 +28,7 @@ type Props = {
   porDia: number[]; historial: MesHistorial[]; consejos: Consejo[]; hoy: Hoy;
   movCredito: Record<number, MovCredito[]>; cuentas: Cuenta[];
   metas: Meta[]; transferencias: Transferencia[]; hormiga: Hormiga[]; suscripciones: Suscripcion[]; patrimonio: PuntoPatrimonio[];
+  retos: Reto[];
 };
 type Tab = 'resumen' | 'movimientos' | 'billetera' | 'plan';
 
@@ -132,7 +134,7 @@ export default function App(p: Props) {
         {tab === 'billetera' && (
           <Creditos deudas={p.deudas} cuentas={p.cuentas} r={p.resumen} mov={p.movCredito} patrimonio={p.patrimonio} hoyClave={hoyClave} abrir={setEditor} />
         )}
-        {tab === 'plan' && <Plan fijos={p.fijos} metas={p.metas} r={p.resumen} mes={p.mes} abrir={setEditor} avisar={avisar} />}
+        {tab === 'plan' && <Plan fijos={p.fijos} metas={p.metas} retos={p.retos} r={p.resumen} mes={p.mes} abrir={setEditor} avisar={avisar} />}
       </main>
 
       {editor && <Modal editor={editor} cuentas={p.cuentas} metas={p.metas} r={p.resumen} cerrar={() => setEditor(null)} avisar={avisar} />}
@@ -161,7 +163,7 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
   return (
     <div className="rejilla">
       <div className="col-principal">
-        {r.esActual ? <Medidor r={r} abrir={abrir} /> : <CierreMes r={r} />}
+        {r.esActual ? <Medidor r={r} abrir={abrir} racha={rachaLimite(porDia, limiteDiario > 0 && r.modo === 'mes' ? limiteDiario : r.presupuestoHoy, r.diaHoy)} /> : <CierreMes r={r} />}
 
         <section className="bloque" aria-labelledby="t-mes">
           <div className="bloque-cab">
@@ -313,7 +315,7 @@ function CierreMes({ r }: { r: TResumen }) {
   );
 }
 
-function Medidor({ r, abrir }: { r: TResumen; abrir: (e: Editor) => void }) {
+function Medidor({ r, abrir, racha = 0 }: { r: TResumen; abrir: (e: Editor) => void; racha?: number }) {
   const pago = r.proximoPago;
   const fechaPago = `${pago.dia} de ${mesCortoDe(pago.mes)}`;
 
@@ -377,6 +379,9 @@ function Medidor({ r, abrir }: { r: TResumen; abrir: (e: Editor) => void }) {
       </div>
       <Datos r={r} fechaPago={fechaPago} />
       <Proyeccion r={r} />
+      {racha >= 2 && (
+        <p className="racha"><span aria-hidden>🔥</span> {racha} días seguidos sin pasarte del límite</p>
+      )}
     </section>
   );
 }

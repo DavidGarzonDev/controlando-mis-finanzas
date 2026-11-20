@@ -52,7 +52,8 @@
   --radio-chico: 10px;
   --sombra: 0 1px 2px rgb(18 24 38 / 0.04), 0 8px 24px -12px rgb(18 24 38 / 0.18);
   --curva: cubic-bezier(0.16, 1, 0.3, 1);
-  --fuente: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Manrope: moderna y clara, con buenos números. Va dentro de la app (no depende de Google). */
+  --fuente: 'Manrope Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 
   accent-color: var(--azul);
 }
@@ -66,7 +67,8 @@ body {
   margin: 0;
   background: var(--fondo);
   color: var(--tinta);
-  font: 400 15px/1.5 var(--fuente);
+  font: 500 15px/1.5 var(--fuente);
+  font-feature-settings: 'tnum' 0;
   -webkit-font-smoothing: antialiased;
 }
 ::selection { background: var(--azul-suave); color: var(--tinta); }
@@ -1405,3 +1407,25 @@ a.btn { text-decoration: none; color: inherit; }
 
 .f-master-circulos { width: 46px; height: 29px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.2)); }
 .tarjeta.mini .f-master-circulos { width: 36px; height: 23px; }
+
+/* Retos y rachas */
+.racha { margin-top: 10px; font-weight: 700; font-size: 0.9rem; }
+.retos { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 900px) { .retos { grid-template-columns: 1fr 1fr; } }
+.reto { display: grid; gap: 8px; padding: 14px 16px; background: var(--papel); border: 1px solid var(--linea); border-radius: var(--radio); animation: subir 0.4s var(--curva) both; }
+.reto-cab { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.reto-dias { display: flex; gap: 6px; }
+.reto-dias span { flex: 1; height: 10px; border-radius: 5px; background: var(--papel-2); box-shadow: inset 0 0 0 1px var(--linea); }
+.reto-dias span.on { background: linear-gradient(90deg, #ff9a3c, #ff5a3c); box-shadow: none; }
+.reto-dias span.hoy { box-shadow: inset 0 0 0 2px #ff9a3c; animation: latido 1.6s ease-in-out infinite; }
+@keyframes latido { 50% { opacity: 0.55; } }
+.retos-catalogo { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.reto-op { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px dashed var(--linea-fuerte); background: var(--papel); cursor: pointer; transition: border-color 0.2s, transform 0.2s var(--curva); }
+.reto-op:hover { border-color: #ff7a3c; transform: translateY(-2px); }
+.reto-op small { color: var(--tinta-3); font-size: 0.8rem; }
+.reto-op-accion { display: inline-flex; align-items: center; gap: 4px; color: #e5622a; font-weight: 700; font-size: 0.82rem; margin-top: 2px; }
+.retos-hechos { margin-top: 4px; }
+
+/* Cifras con números del mismo ancho (se alinean en columnas) */
+.num, .medidor-cifra, .tarjeta-disp b, .tarjeta-saldo b, .cupo-cifras b, .fila-monto, .resumen-linea b { font-variant-numeric: tabular-nums; }
+h1, h2, h3, .medidor-cifra, .tarjeta-banco { letter-spacing: -0.02em; }

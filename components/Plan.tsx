@@ -1,23 +1,89 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Check, Gauge, PiggyBank, Plus, Target } from 'lucide-react';
-import { marcarFijo } from '@/app/actions';
+import { Check, Flame, Gauge, PiggyBank, Plus, Target, Trophy } from 'lucide-react';
+import { iniciarReto, marcarFijo, quitarRetoAccion } from '@/app/actions';
+import { CATALOGO, type Reto } from '@/lib/retosComun';
 import { CATEGORIAS } from '@/lib/categorias';
 import type { Fijo, Meta, Resumen } from '@/lib/datos';
 import type { Editor } from './Modal';
 import { Contador } from './animacion';
 import { COLOR_CAT, ICONO_CAT, fechaLarga, pesos } from './util';
 
-export function Plan({ fijos, metas, r, mes, abrir, avisar }: {
-  fijos: Fijo[]; metas: Meta[]; r: Resumen; mes: string; abrir: (e: Editor) => void; avisar: (m: string) => void;
+export function Plan({ fijos, metas, retos, r, mes, abrir, avisar }: {
+  fijos: Fijo[]; metas: Meta[]; retos: Reto[]; r: Resumen; mes: string; abrir: (e: Editor) => void; avisar: (m: string) => void;
 }) {
   return (
     <div className="columna ancha plan">
+      {r.esActual && <Retos retos={retos} avisar={avisar} />}
       <Metas metas={metas} abrir={abrir} />
       <Topes r={r} abrir={abrir} />
       <Fijos fijos={fijos} mes={mes} abrir={abrir} avisar={avisar} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function Retos({ retos, avisar }: { retos: Reto[]; avisar: (m: string) => void }) {
+  const [pendiente, iniciar] = useTransition();
+  const activos = retos.filter((x) => x.estado === 'activo');
+  const recientes = retos.filter((x) => x.estado !== 'activo').slice(0, 3);
+  const disponibles = CATALOGO.filter((c) => !activos.some((a) => a.nombre === c.nombre));
+  const empezar = (clave: string, nombre: string) =>
+    iniciar(async () => {
+      await iniciarReto(clave);
+      avisar(`Reto iniciado: ${nombre}`);
+    });
+
+  return (
+    <section aria-labelledby="t-plan-retos">
+      <div className="bloque-cab">
+        <div>
+          <h2 id="t-plan-retos"><Flame size={18} aria-hidden className="ico-titulo" /> Retos</h2>
+          <p className="sub">Para que ahorrar sea un juego. El bot te avisa si se rompe o si lo logras.</p>
+        </div>
+      </div>
+      {activos.length > 0 && (
+        <ul className="retos">
+          {activos.map((x) => (
+            <li key={x.id} className="reto">
+              <div className="reto-cab">
+                <b>{x.nombre}</b>
+                <button className="enlace" onClick={() => iniciar(async () => { await quitarRetoAccion(x.id); avisar('Reto quitado'); })}>Quitar</button>
+              </div>
+              <div className="reto-dias" aria-label={`${x.cumplidos} de ${x.meta}`}>
+                {Array.from({ length: x.meta }, (_, i) => (
+                  <span key={i} className={i < x.cumplidos ? 'on' : x.tipo !== 'cero' && i === x.cumplidos ? 'hoy' : ''} />
+                ))}
+              </div>
+              <p className="fila-sub">{x.detalle}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {disponibles.length > 0 && (
+        <div className="retos-catalogo">
+          {disponibles.map((c) => (
+            <button key={c.clave} className="reto-op" disabled={pendiente} onClick={() => empezar(c.clave, c.nombre)}>
+              <b>{c.nombre}</b>
+              <small>{c.descripcion}</small>
+              <span className="reto-op-accion"><Plus size={14} aria-hidden /> Empezar</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {recientes.length > 0 && (
+        <ul className="libro retos-hechos">
+          {recientes.map((x) => (
+            <li key={x.id} className="fila">
+              <span className={`fila-ico ${x.estado === 'logrado' ? 'ok' : ''}`} aria-hidden>{x.estado === 'logrado' ? <Trophy size={16} /> : <Flame size={16} />}</span>
+              <span className="fila-txt"><span className="fila-nombre">{x.nombre}</span><span className="fila-sub">{x.estado === 'logrado' ? '¡Lo lograste!' : x.detalle}</span></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

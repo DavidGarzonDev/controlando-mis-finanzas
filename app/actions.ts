@@ -169,6 +169,22 @@ export async function aportarMeta(fd: FormData) {
   refrescar();
 }
 
+export async function iniciarReto(clave: string) {
+  await listo();
+  const { crearReto } = await import('@/lib/retos');
+  const r = await db.resumen();
+  // Si hoy no hay límite (te pasaste del mes), el reto usa 80 % de tu gasto diario de la última semana.
+  await crearReto(clave, r.presupuestoHoy > 0 ? r.presupuestoHoy : Math.max(10_000, r.ritmo7 * 0.8));
+  refrescar();
+}
+
+export async function quitarRetoAccion(id: number) {
+  await listo();
+  const { quitarReto } = await import('@/lib/retos');
+  await quitarReto(id);
+  refrescar();
+}
+
 export async function marcarCuota(id: number, pagada: boolean, mes?: string) {
   await listo();
   await db.marcarCuota(id, pagada, db.mesValido(mes));
