@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { pesos } from './util';
 
+// Momento en que cargó la página: solo en el primer segundo y medio las cifras cuentan desde 0.
+const CARGA = typeof performance !== 'undefined' ? performance.now() : 0;
+
 const reducido = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /**
@@ -14,7 +17,8 @@ export function Contador({ valor, formato = pesos, duracion = 900 }: { valor: nu
   const previo = useRef<number | null>(null);
 
   useEffect(() => {
-    const desde = previo.current ?? 0;
+    // Al cambiar de pestaña no se vuelve a contar desde 0 (se veía como un parpadeo): solo si el valor cambia.
+    const desde = previo.current ?? (performance.now() - CARGA < 1500 ? 0 : valor);
     previo.current = valor;
     if (reducido() || desde === valor) {
       setMostrado(valor);

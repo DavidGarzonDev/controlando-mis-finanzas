@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { flushSync } from 'react-dom';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
   ChartPie, ChartSpline, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
@@ -18,7 +18,7 @@ import { rachaLimite, type Reto } from '@/lib/retosComun';
 import { BarrasHistorial, Calendario, Chispa, CurvaMes, Dona } from './graficas';
 import { Creditos } from './Creditos';
 import { Plan } from './Plan';
-import { Contador, conTransicion } from './animacion';
+import { Contador } from './animacion';
 import { BotonPrivado, BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
 import { Paleta } from './Paleta';
@@ -83,11 +83,46 @@ export default function App(p: Props) {
   const ir = useCallback((t: Tab) => {
     if (t === tab) return;
     history.pushState(null, '', `${window.location.pathname}${window.location.search}${t === 'resumen' ? '' : `#${t}`}`);
-    const i = TABS.findIndex((x) => x.id === tab);
-    const j = TABS.findIndex((x) => x.id === t);
-    conTransicion(() => flushSync(() => setTab(t)), j > i ? 'adelante' : 'atras');
-    window.scrollTo({ top: 0 });
+    // Sin transición de página: la barrita de la pestaña viaja y el contenido aparece con un fundido corto.
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    setTab(t);
   }, [tab]);
+
+  // Las animaciones de entrada (tarjetas, filas) solo en la primera carga; al cambiar de pestaña no se repiten.
+  const [listo, setListo] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setListo(true), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Cambiar de mes sin recargar la página: se queda lo que ves (un poco atenuado) hasta que llega el mes nuevo.
+  const router = useRouter();
+  const [cambiandoMes, iniciarMes] = useTransition();
+  const irMes = useCallback((href: string) => iniciarMes(() => router.push(href, { scroll: false })), [router]);
+
+  // Barrita que se desliza hasta la pestaña activa
+  const indicador = useRef<HTMLSpanElement>(null);
+  const [indicadorListo, setIndicadorListo] = useState(false);
+  useLayoutEffect(() => {
+    const nav = tabsRef.current;
+    const ind = indicador.current;
+    if (!nav || !ind) return;
+    const poner = () => {
+      const b = nav.querySelector<HTMLElement>(`[data-tab="${tab}"]`);
+      if (!b) return;
+      ind.style.width = `${b.offsetWidth}px`;
+      ind.style.height = `${b.offsetHeight}px`;
+      ind.style.transform = `translate(${b.offsetLeft}px, ${b.offsetTop}px)`;
+    };
+    poner();
+    const ro = new ResizeObserver(poner);
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, [tab]);
+  useEffect(() => {
+    const t = requestAnimationFrame(() => setIndicadorListo(true));
+    return () => cancelAnimationFrame(t);
+  }, []);
 
   const avisar = useCallback((texto: string) => setAviso({ texto, n: Date.now() }), []);
   useEffect(() => {
@@ -132,7 +167,8 @@ export default function App(p: Props) {
   const titulo = TABS.find((t) => t.id === tab)?.label ?? 'Resumen';
 
   return (
-    <div className="app">
+    <div className="app" data-listo={listo || undefined} data-cargando={cambiandoMes || undefined}>
+      <div className="carga-mes" aria-hidden />
       <div className="aurora" aria-hidden />
       <div className="franja-colombia" aria-hidden />
 
@@ -163,6 +199,7 @@ export default function App(p: Props) {
               <span>{label}</span>
             </button>
           ))}
+          <span className={`tabs-indicador ${indicadorListo ? '' : 'quieto'}`} ref={indicador} aria-hidden />
         </nav>
         <div className="lateral-pie">
           <button className="btn primario registrar" aria-label="Registrar" onClick={() => setEditor({ tipo: 'nuevo', modo: 'gasto' })}>
@@ -183,7 +220,7 @@ export default function App(p: Props) {
           <img className="marca-logo solo-movil" src="/logo-192.png" alt="" width={36} height={36} />
           <div className="barra-titulo">
             <h1>{titulo}</h1>
-            <SelectorMes mes={p.mes} meses={p.meses} tab={tab} />
+            <SelectorMes mes={p.mes} meses={p.meses} tab={tab} irMes={irMes} />
           </div>
           <button className="btn icono-tema solo-movil" aria-label="Buscar o registrar" onClick={() => setPaleta(true)}>
             <Search size={20} aria-hidden />
@@ -195,7 +232,7 @@ export default function App(p: Props) {
         {!p.resumen.esActual && (
           <p className="aviso-mes">
             Estás viendo <b>{nombreMes(Number(p.mes.slice(5)))} {p.mes.slice(0, 4)}</b>.{' '}
-            <a href={`/${tab === 'resumen' ? '' : `#${tab}`}`}>Volver a este mes</a>
+            <a href={`/${tab === 'resumen' ? '' : `#${tab}`}`} onClick={(e) => { e.preventDefault(); irMes(`/${tab === 'resumen' ? '' : `#${tab}`}`); }}>Volver a este mes</a>
           </p>
         )}
 
@@ -909,7 +946,7 @@ export function Vacio({ children, icono = 'bot' }: { children: React.ReactNode; 
 }
 
 /** ‹ noviembre 2026 › — navega entre meses conservando la pestaña. */
-function SelectorMes({ mes, meses, tab }: { mes: string; meses: string[]; tab: Tab }) {
+function SelectorMes({ mes, meses, tab, irMes }: { mes: string; meses: string[]; tab: Tab; irMes: (href: string) => void }) {
   const [a, m] = mes.split('-').map(Number);
   const mover = (d: number) => {
     const f = new Date(Date.UTC(a, m - 1 + d, 1));
@@ -923,13 +960,13 @@ function SelectorMes({ mes, meses, tab }: { mes: string; meses: string[]; tab: T
   return (
     <nav className="selector-mes" aria-label="Cambiar de mes">
       {hay(anterior) ? (
-        <a href={href(anterior)} aria-label={`Ver ${nombreMes(Number(anterior.slice(5)))}`}><ChevronLeft size={18} aria-hidden /></a>
+        <a href={href(anterior)} onClick={(e) => { e.preventDefault(); irMes(href(anterior)); }} aria-label={`Ver ${nombreMes(Number(anterior.slice(5)))}`}><ChevronLeft size={18} aria-hidden /></a>
       ) : (
         <span className="off" aria-hidden><ChevronLeft size={18} /></span>
       )}
       <span className="selector-mes-texto">{nombreMes(m)} {a}</span>
       {hay(siguiente) ? (
-        <a href={href(siguiente)} aria-label={`Ver ${nombreMes(Number(siguiente.slice(5)))}`}><ChevronRight size={18} aria-hidden /></a>
+        <a href={href(siguiente)} onClick={(e) => { e.preventDefault(); irMes(href(siguiente)); }} aria-label={`Ver ${nombreMes(Number(siguiente.slice(5)))}`}><ChevronRight size={18} aria-hidden /></a>
       ) : (
         <span className="off" aria-hidden><ChevronRight size={18} /></span>
       )}
