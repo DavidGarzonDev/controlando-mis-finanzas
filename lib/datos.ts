@@ -1,5 +1,5 @@
 import { sql } from './db';
-import { esCategoria, type Categoria } from './categorias';
+import { esCategoria, type Categoria, type CategoriaPropia } from './categorias';
 import { ZONA } from './config';
 import { hoyEnColombia, mesClave, proximoPago, type Hoy, type ProximoPago } from './fechas';
 
@@ -90,7 +90,8 @@ export type Resumen = {
   /** Promedio diario de gasto de los últimos 7 días. */
   ritmo7: number;
   /** Cómo terminarías el mes a este ritmo, y cuánto te suele entrar que aún no ha llegado. */
-  proyeccion: { finDeMes: number; ingresoEsperado: number } | null;
+  /** Cómo cierras el mes si sigues gastando a tu ritmo real (el mayor entre la última semana y el promedio del mes). */
+  proyeccion: { finDeMes: number; ingresoEsperado: number; ritmo: number; diasRestantes: number } | null;
   pendientes: Pendiente[];
   totalPendiente: number;
   diaHoy: number;
@@ -156,6 +157,48 @@ const filaGasto = (r: Record<string, unknown>): Gasto => ({
   id: n(r.id), fecha: String(r.fecha), concepto: String(r.concepto), monto: n(r.monto),
   categoria: String(r.categoria), origen: String(r.origen), cuentaId: nulo(r.cuenta_id),
 });
+
+export async function gastoPorId(id: number): Promise<Gasto | null> {
+  const rows = await sql()`SELECT id, fecha, concepto, monto, categoria, origen, cuenta_id FROM gastos WHERE id = ${id}`;
+  return rows[0] ? filaGasto(rows[0]) : null;
+}
+
+export async function ingresoPorId(id: number): Promise<Ingreso | null> {
+  const [r] = await sql()`SELECT id, fecha, concepto, monto, cuenta_id FROM ingresos WHERE id = ${id}`;
+  return r ? { id: n(r.id), fecha: String(r.fecha), concepto: String(r.concepto), monto: n(r.monto), cuentaId: nulo(r.cuenta_id) } : null;
+}
+
+/** El otro monto posible mientras no lo confirmes ("700": ¿$700 o $700.000?). */
+export async function dudaMonto(tipo: 'gasto' | 'ingreso', id: number): Promise<number | null> {
+  const [r] = await sql().query(`SELECT duda_monto FROM ${tipo === 'gasto' ? 'gastos' : 'ingresos'} WHERE id = $1`, [id]);
+  return r ? nulo(r.duda_monto) : null;
+}
+export async function guardarDuda(tipo: 'gasto' | 'ingreso', id: number, otro: number | null) {
+  await sql().query(`UPDATE ${tipo === 'gasto' ? 'gastos' : 'ingresos'} SET duda_monto = $1 WHERE id = $2`, [otro, id]);
+}
+
+/** Cambia la cuenta de un gasto o ingreso: devuelve la plata a la cuenta vieja y la mueve en la nueva. */
+export async function cambiarCuenta(tipo: 'gasto' | 'ingreso', id: number, cuentaId: number) {
+  const tabla = tipo === 'gasto' ? 'gastos' : 'ingresos';
+  const [antes] = await sql().query(`SELECT monto, cuenta_id FROM ${tabla} WHERE id = $1`, [id]);
+  if (!antes) return null;
+  const signo = tipo === 'gasto' ? -1 : 1;
+  if (nulo(antes.cuenta_id) === cuentaId) return { mismo: true };
+  await sql().query(`UPDATE ${tabla} SET cuenta_id = $1 WHERE id = $2`, [cuentaId, id]);
+  await moverCuenta(nulo(antes.cuenta_id), -signo * n(antes.monto));
+  await moverCuenta(cuentaId, signo * n(antes.monto));
+  return { mismo: false };
+}
+
+/** Cuántas veces y cuánto en los últimos 7 días para conceptos que coinciden (ej. domicilios). */
+export async function vecesEnLaSemana(patron: string): Promise<{ veces: number; total: number }> {
+  const [r] = await sql().query(
+    `SELECT COUNT(*) AS veces, COALESCE(SUM(monto), 0) AS total FROM gastos
+     WHERE fecha > now() - interval '7 days' AND (concepto ~* $1 OR texto_original ~* $1)`,
+    [patron],
+  );
+  return { veces: n(r?.veces), total: n(r?.total) };
+}
 
 export async function ultimoGasto(): Promise<Gasto | null> {
   const rows = await sql()`SELECT id, fecha, concepto, monto, categoria, origen, cuenta_id FROM gastos ORDER BY id DESC LIMIT 1`;
@@ -586,10 +629,78 @@ export async function suscripciones(): Promise<Suscripcion[]> {
 // ---------- Palabras aprendidas ----------
 
 export async function palabrasAprendidas(): Promise<Record<string, Categoria>> {
-  const rows = await sql()`SELECT palabra, categoria FROM palabras`;
+  const [rows, propias] = await Promise.all([sql()`SELECT palabra, categoria FROM palabras`, nombresPropios()]);
   const out: Record<string, Categoria> = {};
-  for (const r of rows) if (esCategoria(String(r.categoria))) out[String(r.palabra)] = r.categoria as Categoria;
+  for (const r of rows) if (esCategoria(String(r.categoria), propias)) out[String(r.palabra)] = String(r.categoria);
   return out;
+}
+
+// ---------- Semana ----------
+
+export type Semana = {
+  desde: string; hasta: string; total: number; anterior: number; veces: number;
+  porCategoria: { categoria: string; total: number }[];
+  porDia: { fecha: string; total: number }[];
+  ingresos: number;
+};
+
+/** Los últimos 7 días (hoy incluido) contra los 7 anteriores. */
+export async function resumenSemana(): Promise<Semana> {
+  const hoy = `(now() AT TIME ZONE '${ZONA}')::date`;
+  const dia = `(fecha AT TIME ZONE '${ZONA}')::date`;
+  const [[t], cats, dias] = await Promise.all([
+    sql().query(`SELECT
+      (SELECT COALESCE(SUM(monto), 0) FROM gastos WHERE ${dia} > ${hoy} - 7) AS total,
+      (SELECT COUNT(*) FROM gastos WHERE ${dia} > ${hoy} - 7) AS veces,
+      (SELECT COALESCE(SUM(monto), 0) FROM gastos WHERE ${dia} > ${hoy} - 14 AND ${dia} <= ${hoy} - 7) AS anterior,
+      (SELECT COALESCE(SUM(monto), 0) FROM ingresos WHERE ${dia} > ${hoy} - 7) AS ingresos,
+      to_char(${hoy} - 6, 'YYYY-MM-DD') AS desde, to_char(${hoy}, 'YYYY-MM-DD') AS hasta`),
+    sql().query(`SELECT categoria, SUM(monto) AS total FROM gastos WHERE ${dia} > ${hoy} - 7 AND categoria <> 'Ajuste'
+      GROUP BY categoria ORDER BY total DESC`),
+    sql().query(`SELECT to_char(d, 'YYYY-MM-DD') AS fecha,
+        COALESCE((SELECT SUM(monto) FROM gastos WHERE ${dia} = d::date), 0) AS total
+      FROM generate_series(${hoy} - 6, ${hoy}, interval '1 day') AS d ORDER BY d`),
+  ]);
+  return {
+    desde: String(t.desde), hasta: String(t.hasta), total: n(t.total), anterior: n(t.anterior), veces: n(t.veces), ingresos: n(t.ingresos),
+    porCategoria: cats.map((c) => ({ categoria: String(c.categoria), total: n(c.total) })),
+    porDia: dias.map((d) => ({ fecha: String(d.fecha), total: n(d.total) })),
+  };
+}
+
+/** Marca la semana como enviada; false si ya se había enviado. */
+export async function marcarSemana(fecha: string): Promise<boolean> {
+  const rows = await sql()`INSERT INTO resumenes_semanales (semana) VALUES (${fecha}) ON CONFLICT DO NOTHING RETURNING semana`;
+  return rows.length > 0;
+}
+
+// ---------- Categorías propias ----------
+
+export async function categoriasPropias(): Promise<CategoriaPropia[]> {
+  const rows = await sql()`SELECT nombre, emoji, color FROM categorias_propias ORDER BY creada`;
+  return rows.map((r) => ({ nombre: String(r.nombre), emoji: r.emoji ? String(r.emoji) : null, color: r.color ? String(r.color) : null }));
+}
+export async function nombresPropios(): Promise<string[]> {
+  return (await categoriasPropias()).map((c) => c.nombre);
+}
+/** Crea (o actualiza) una categoría. El nombre queda con mayúscula inicial; máximo 24 letras. */
+export async function crearCategoria(nombre: string, emoji: string | null, color: string | null): Promise<string | null> {
+  const limpio = nombre.replace(/\p{Extended_Pictographic}|\uFE0F|\u200D/gu, '').replace(/[^\p{L}\d ]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  if (limpio.length < 2) return null;
+  const n = limpio[0].toUpperCase() + limpio.slice(1);
+  if (esCategoria(n) || n === 'Ajuste') return n;
+  const e = emoji?.match(/\p{Extended_Pictographic}(\uFE0F|\u200D\p{Extended_Pictographic})*/u)?.[0] ?? null;
+  await sql()`
+    INSERT INTO categorias_propias (nombre, emoji, color) VALUES (${n}, ${e}, ${color})
+    ON CONFLICT (nombre) DO UPDATE SET emoji = COALESCE(EXCLUDED.emoji, categorias_propias.emoji), color = COALESCE(EXCLUDED.color, categorias_propias.color)`;
+  return n;
+}
+/** Borra una categoría propia: sus gastos pasan a "Otros" y se olvida lo aprendido. */
+export async function borrarCategoria(nombre: string) {
+  await sql()`UPDATE gastos SET categoria = 'Otros' WHERE categoria = ${nombre}`;
+  await sql()`DELETE FROM palabras WHERE categoria = ${nombre}`;
+  await sql()`DELETE FROM presupuestos WHERE categoria = ${nombre}`;
+  await sql()`DELETE FROM categorias_propias WHERE nombre = ${nombre}`;
 }
 export async function aprenderPalabras(palabras: string[], categoria: Categoria) {
   for (const p of palabras) {
@@ -725,7 +836,11 @@ export function calcularResumen(d: {
   if (hoy.esActual) {
     const diasRestantes = hoy.diasMes - hoy.dia;
     const ingresoEsperado = Math.max(0, Math.round((d.ingresoPromedio ?? 0) - d.ingresos));
-    proyeccion = { finDeMes: Math.round(disponible - ritmo7 * diasRestantes), ingresoEsperado };
+    // Ritmo realista: la última semana puede haber sido tranquila; el promedio del mes ya incluye
+    // las salidas, la gasolina y los antojos que siempre aparecen. Se usa el mayor de los dos.
+    const promedioMes = hoy.dia > 0 ? d.variables / hoy.dia : 0;
+    const ritmo = Math.round(Math.max(ritmo7, promedioMes));
+    proyeccion = { finDeMes: Math.round(disponible - ritmo * diasRestantes), ingresoEsperado, ritmo, diasRestantes };
   }
 
   return {

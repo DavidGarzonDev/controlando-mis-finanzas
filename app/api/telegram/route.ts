@@ -1,6 +1,7 @@
 import { manejarMensaje, procesarBoton, type Respuesta } from '@/lib/bot';
 import { leerMedio } from '@/lib/gemini';
-import { asegurarWebhookConBotones, descargarArchivo, editarMensaje, enviarMensaje, esc, responderBoton } from '@/lib/telegram';
+import { enviarResumenSemanal } from '@/lib/semanal';
+import { asegurarComandos, asegurarWebhookConBotones, descargarArchivo, editarMensaje, enviarConMenu, enviarMensaje, esc, responderBoton } from '@/lib/telegram';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
 
   // Para que lleguen los toques de los botones (se corrige solo, una vez).
   await asegurarWebhookConBotones();
+  await asegurarComandos();
 
   // Tocaron un botón (ej. "¿De dónde salió?" → Nu)
   const toque = update?.callback_query;
@@ -67,20 +69,9 @@ export async function POST(req: Request) {
     }
     try {
       const r = await procesarBoton(String(toque.data ?? ''));
-      await responderBoton(toque.id, r?.aviso);
-      if (r?.linea && toque.message) {
-        // Quita la pregunta respondida, agrega la respuesta y deja las demás preguntas (con sus botones).
-        const esRespondida = (l: string) => (r.pregunta === 'cuenta' ? /^¿(De dónde salió|A dónde entró)\?/ : /^¿Era \$/).test(l);
-        const lineas = String(toque.message.text ?? '').split('\n').filter((l) => !esRespondida(l));
-        const cuerpo = lineas.filter((l) => !l.startsWith('¿')).map(esc);
-        const pendientes = lineas.filter((l) => l.startsWith('¿')).map(esc);
-        const prefijo = r.pregunta === 'cuenta' ? 'c:' : 'm:';
-        const filas = (toque.message.reply_markup?.inline_keyboard ?? []) as { text: string; callback_data: string }[][];
-        const quedan = filas
-          .map((f) => f.filter((b) => !b.callback_data.startsWith(prefijo)).map((b) => ({ texto: b.text, dato: b.callback_data })))
-          .filter((f) => f.length);
-        await editarMensaje(chat, toque.message.message_id, [...cuerpo, r.linea, ...pendientes].join('\n'), quedan);
-      }
+      await responderBoton(toque.id, r.aviso.trim() || undefined);
+      // La tarjeta del movimiento se vuelve a dibujar con su estado nuevo (y sus botones).
+      if (r.texto !== undefined && toque.message) await editarMensaje(chat, toque.message.message_id, r.texto, r.botones ?? []);
     } catch (e) {
       console.error('Error con el botón', e);
       await responderBoton(toque.id, 'No pude guardarlo, intenta otra vez');
@@ -115,7 +106,11 @@ export async function POST(req: Request) {
     const simples = respuestas.filter((r): r is string => typeof r === 'string');
     const conBotones = respuestas.filter((r): r is Exclude<Respuesta, string> => typeof r !== 'string');
     if (entrada.leido || simples.length) await enviarMensaje(chatId, [entrada.leido, ...simples].filter(Boolean).join('\n\n'));
-    for (const r of conBotones) await enviarMensaje(chatId, r.texto, r.botones);
+    for (const r of conBotones) {
+      if (r.semana) await enviarResumenSemanal(chatId);
+      else if (r.menu) await enviarConMenu(chatId, r.texto);
+      else await enviarMensaje(chatId, r.texto, r.botones);
+    }
   } catch (e) {
     console.error('Error procesando mensaje', e);
     await enviarMensaje(chatId, 'Ups, algo falló guardando eso. Intenta de nuevo en un momento.');

@@ -139,6 +139,11 @@ Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cua
 | `/tope salidas 150000` / `/topes` | Tope mensual por categoría; te aviso al llegar al 80 % |
 | `/suscripciones` / `/hormiga` | Pagos que se repiten / gastos pequeños que se acumulan |
 | `/retos` / `/reto domicilios` | Retos: semana sin domicilios, semana sin salidas, 7 días sin pasarte del límite, 3 días sin gastar. El bot te avisa si se rompe o si lo logras |
+| `/categorias` / `/categoria Mascotas 🐶` | Ver tus categorías y crear las tuyas con emoji (`/categoria borrar Mascotas` para quitarla) |
+| `/semana` | Resumen de los últimos 7 días con imagen (llega solo cada domingo) |
+| `/menu` | Botones fijos abajo del chat: Hoy, Resumen, Por pagar, Metas, Tarjetas, Deshacer |
+
+**Botones bajo cada gasto:** *Categoría*, *Cuenta* y *Deshacer*. Corriges con un toque, sin comandos.
 
 **Notas de voz y fotos:** mándale al bot una nota de voz ("almuerzo quince mil y gasolina cuarenta") o la foto de un recibo, y Gemini la convierte en texto.
 

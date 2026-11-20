@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Nfc } from 'lucide-react';
 import { bancoPorId, disenoTarjeta, estiloTarjeta, logoBanco, sello, type Banco } from '@/lib/bancos';
 
@@ -16,8 +16,67 @@ function inclinar(e: React.PointerEvent<HTMLElement>) {
   el.style.setProperty('--my', `${y * 100}%`);
 }
 function soltar(e: React.PointerEvent<HTMLElement>) {
-  e.currentTarget.style.setProperty('--rx', '0deg');
-  e.currentTarget.style.setProperty('--ry', '0deg');
+  // Al soltar vuelve a seguir el giro del celular (si lo hay) o queda derecha.
+  for (const v of ['--rx', '--ry', '--mx', '--my']) e.currentTarget.style.removeProperty(v);
+}
+
+/**
+ * Inclina las tarjetas dentro de `raiz` con el giroscopio del celular (el brillo se mueve al girarlo).
+ * En iPhone hay que pedir permiso con un toque: devuelve la función para pedirlo.
+ */
+export function useGiroscopio(raiz: React.RefObject<HTMLElement | null>) {
+  const [activo, setActivo] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || !matchMedia('(pointer: coarse)').matches) return;
+    let base: number | null = null;
+    let cuadro = 0;
+    const leer = (e: DeviceOrientationEvent) => {
+      if (e.beta == null || e.gamma == null) return;
+      base ??= e.beta;
+      const beta = e.beta - base;
+      const gamma = e.gamma;
+      cancelAnimationFrame(cuadro);
+      cuadro = requestAnimationFrame(() => {
+        const el = raiz.current;
+        if (!el) return;
+        const lim = (v: number, m: number) => Math.max(-m, Math.min(m, v));
+        el.style.setProperty('--grx', `${lim(-beta / 3, 9)}deg`);
+        el.style.setProperty('--gry', `${lim(gamma / 3, 12)}deg`);
+        el.style.setProperty('--gmx', `${50 + lim(gamma * 1.5, 50)}%`);
+        el.style.setProperty('--gmy', `${30 + lim(beta * 1.5, 50)}%`);
+      });
+    };
+    window.addEventListener('deviceorientation', leer);
+    return () => { window.removeEventListener('deviceorientation', leer); cancelAnimationFrame(cuadro); };
+  }, [raiz, activo]);
+
+  return async () => {
+    const DOE = (window as unknown as { DeviceOrientationEvent?: { requestPermission?: () => Promise<string> } }).DeviceOrientationEvent;
+    if (activo || !DOE?.requestPermission) return;
+    try {
+      if ((await DOE.requestPermission()) === 'granted') setActivo(true);
+    } catch {
+      /* el usuario dijo que no: las tarjetas quedan quietas */
+    }
+  };
+}
+
+/** El reverso de la tarjeta: banda magnética, firma y los datos que importan (cupo, corte, pago). */
+export function Reverso({ d, filas }: { d: DatosPlastico; filas: { etiqueta: string; valor: string }[] }) {
+  const e = estiloTarjeta(d.color, d.banco);
+  return (
+    <span className={`tarjeta plastico reverso-tarjeta${e.metal ? ' metal' : ''}`} style={{ '--t1': e.t1, '--t2': e.t2, '--tt': e.tt, '--ta': e.ta } as React.CSSProperties}>
+      <span className="banda" aria-hidden />
+      <span className="firma" aria-hidden><i>{d.nombre}</i><b>{d.ultimos4 ? `•••${d.ultimos4.slice(-3)}` : '•••'}</b></span>
+      <span className="reverso-datos">
+        {filas.map((f) => (
+          <span key={f.etiqueta}><small>{f.etiqueta}</small><b className="num">{f.valor}</b></span>
+        ))}
+      </span>
+      <span className="reverso-pie">Toca para voltear</span>
+    </span>
+  );
 }
 
 /** El logo del banco sobre una placa blanca; si no carga, sus iniciales. */

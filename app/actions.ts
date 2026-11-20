@@ -42,7 +42,7 @@ export async function guardarGasto(fd: FormData) {
   const datos = {
     concepto: texto(fd, 'concepto') || 'Gasto',
     monto: entero(fd, 'monto'),
-    categoria: texto(fd, 'categoria') === 'Ajuste' ? 'Ajuste' : normalizarCategoria(texto(fd, 'categoria')) ?? 'Otros',
+    categoria: texto(fd, 'categoria') === 'Ajuste' ? 'Ajuste' : normalizarCategoria(texto(fd, 'categoria'), await db.nombresPropios()) ?? 'Otros',
     cuentaId: await cuentaDe(fd),
   };
   const id = idDe(fd);
@@ -148,7 +148,7 @@ export async function transferir(fd: FormData) {
 
 export async function guardarTopes(fd: FormData) {
   await listo();
-  for (const c of CATEGORIAS) await db.guardarTope(c, entero(fd, `tope_${c}`));
+  for (const c of [...CATEGORIAS, ...(await db.nombresPropios())]) await db.guardarTope(c, entero(fd, `tope_${c}`));
   refrescar();
 }
 
@@ -212,6 +212,16 @@ export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cue
   refrescar();
 }
 
+/** Crea una categoría propia (nombre + emoji) desde la web. */
+export async function crearCategoriaAccion(nombre: string, emoji: string | null) {
+  await listo();
+  const n = await db.crearCategoria(String(nombre).slice(0, 40), emoji ? String(emoji).slice(0, 16) : null, null);
+  if (!n) return null;
+  refrescar();
+  const propia = (await db.categoriasPropias()).find((c) => c.nombre === n);
+  return propia ?? { nombre: n, emoji: null, color: null };
+}
+
 // ---------------------------------------------------------------------------
 // Paleta rápida (Ctrl+K): escribir como en el bot, desde la página
 
@@ -223,14 +233,20 @@ export async function registrarTexto(texto: string): Promise<{ html: string; bot
   const { manejarMensaje } = await import('@/lib/bot');
   const r = await manejarMensaje(texto.slice(0, 300));
   refrescar();
+  if (typeof r !== 'string' && r.semana) {
+    const chat = process.env.TELEGRAM_CHAT_ID;
+    const { enviarResumenSemanal } = await import('@/lib/semanal');
+    const ok = chat ? await enviarResumenSemanal(chat) : false;
+    return { html: ok ? 'Te mandé el resumen de la semana a Telegram.' : 'No pude mandarlo a Telegram.', botones: [] };
+  }
   return typeof r === 'string' ? { html: r, botones: [] } : { html: r.texto, botones: r.botones };
 }
 
 /** Lo mismo que tocar un botón del bot (¿de qué cuenta salió?, ¿era $700 o $700.000?). */
-export async function tocarBoton(dato: string): Promise<{ html: string }> {
+export async function tocarBoton(dato: string): Promise<{ html: string; botones: BotonWeb[][] }> {
   await listo();
   const { procesarBoton } = await import('@/lib/bot');
   const r = await procesarBoton(dato);
   refrescar();
-  return { html: r?.linea || r?.aviso || 'Listo' };
+  return { html: r.texto ?? r.aviso, botones: r.botones ?? [] };
 }

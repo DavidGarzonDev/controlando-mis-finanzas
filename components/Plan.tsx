@@ -4,11 +4,11 @@ import { useState, useTransition } from 'react';
 import { Check, Flame, Gauge, PiggyBank, Plus, Target, Trophy } from 'lucide-react';
 import { iniciarReto, marcarFijo, quitarRetoAccion } from '@/app/actions';
 import { CATALOGO, type Reto } from '@/lib/retosComun';
-import { CATEGORIAS } from '@/lib/categorias';
 import type { Fijo, Meta, Resumen } from '@/lib/datos';
 import type { Editor } from './Modal';
 import { Contador } from './animacion';
-import { COLOR_CAT, ICONO_CAT, fechaLarga, pesos } from './util';
+import { colorCat, fechaLarga, pesos, todasCategorias } from './util';
+import { IconoCat } from './IconoCat';
 
 export function Plan({ fijos, metas, retos, r, mes, abrir, avisar }: {
   fijos: Fijo[]; metas: Meta[]; retos: Reto[]; r: Resumen; mes: string; abrir: (e: Editor) => void; avisar: (m: string) => void;
@@ -146,7 +146,7 @@ function Metas({ metas, abrir }: { metas: Meta[]; abrir: (e: Editor) => void }) 
 // ---------------------------------------------------------------------------
 
 function Topes({ r, abrir }: { r: Resumen; abrir: (e: Editor) => void }) {
-  const conTope = CATEGORIAS.filter((c) => r.topes[c]);
+  const conTope = todasCategorias().filter((c) => r.topes[c]);
   return (
     <section aria-labelledby="t-plan-topes">
       <div className="bloque-cab">
@@ -162,11 +162,10 @@ function Topes({ r, abrir }: { r: Resumen; abrir: (e: Editor) => void }) {
             const tope = r.topes[c];
             const usado = r.porCategoria.find((x) => x.categoria === c)?.total ?? 0;
             const pct = usado / tope;
-            const Icono = ICONO_CAT[c];
             const estado = pct > 1 ? 'alto' : pct >= 0.8 ? 'medio' : 'bajo';
             return (
-              <li key={c} className={`tope ${estado}`} style={{ '--c': COLOR_CAT[c] } as React.CSSProperties}>
-                <span className="cat-ico"><Icono size={16} aria-hidden /></span>
+              <li key={c} className={`tope ${estado}`} style={{ '--c': colorCat(c) } as React.CSSProperties}>
+                <span className="cat-ico"><IconoCat c={c} /></span>
                 <div className="tope-info">
                   <p className="tope-cab"><b>{c}</b><span className="num">{pesos(usado)} <small>de {pesos(tope)}</small></span></p>
                   <div className="cupo-barra" role="meter" aria-label={`${c}: ${Math.round(pct * 100)} % del tope`} aria-valuemin={0} aria-valuemax={tope} aria-valuenow={Math.min(usado, tope)}>

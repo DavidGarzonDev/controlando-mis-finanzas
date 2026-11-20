@@ -1,4 +1,5 @@
-import { CATEGORIAS, normalizarCategoria, sinTildes } from './categorias';
+import { CATEGORIAS, conEmoji, normalizarCategoria, sinTildes } from './categorias';
+import { barra, tarjetaGasto, tarjetaIngreso, textoCategorias } from './mensajes';
 import { extraerMonto, interpretar } from './parser';
 import { interpretarConIA } from './gemini';
 import { generarConsejos, simularPago, tasaMensual } from './consejos';
@@ -8,7 +9,7 @@ import * as db from './datos';
 import { esc, pesos, type Boton } from './telegram';
 
 /** Lo que responde el bot: texto, y a veces botones para tocar (ej. ¿de qué cuenta salió?). */
-export type Respuesta = string | { texto: string; botones: Boton[][] };
+export type Respuesta = string | { texto: string; botones: Boton[][]; menu?: boolean; semana?: boolean };
 import { bancoEnTexto, bancoPorId } from './bancos';
 
 const AYUDA = `<b>Cómo usarme</b>
@@ -51,19 +52,24 @@ Y lo que te entra, venga de donde venga:
 /suscripciones — pagos que se repiten cada mes
 /hormiga — gastos pequeños que se acumulan
 También puedes mandarme una <b>nota de voz</b> o la <b>foto de un recibo</b>.
+/saldo nequi 250000 — actualiza el saldo de una cuenta (sin monto: ver saldos)
+/pague gimnasio — marca un gasto fijo o una cuota como pagada
+<code>ya pagué la cuota de la nu</code> — si la pagaste en el banco y el saldo ya está al día: solo la marca
+/ajuste -20000 — cuadra plata que no sabes en qué se fue (o +20000 si te sobra)
+/borrar — borra el último gasto
+
+<b>Categorías</b>
+Debajo de cada gasto tienes los botones <b>Categoría</b>, <b>Cuenta</b> y <b>Deshacer</b>.
+/categorias — ver todas · <code>/categoria Mascotas 🐶</code> — crear una tuya
+/cat Salidas — corrige la categoría del último gasto (y aprendo)
 
 <b>Seguridad del dashboard</b>
 /sesiones — dónde tienes la sesión abierta
 /cerrarsesiones — saca a todos los dispositivos
 /desbloquear — quita el bloqueo por intentos fallidos
-/saldo nequi 250000 — actualiza el saldo de una cuenta (sin monto: ver saldos)
-/pague gimnasio — marca un gasto fijo o una cuota como pagada
-<code>ya pagué la cuota de la nu</code> — si la pagaste en el banco y el saldo ya está al día: solo la marca
-/ajuste -20000 — cuadra plata que no sabes en qué se fue (o +20000 si te sobra)
-/cat Salidas — corrige la categoría del último gasto (y aprendo)
-/borrar — borra el último gasto
 
-Categorías: ${CATEGORIAS.join(', ')}`;
+/semana — resumen de los últimos 7 días con imagen (llega solo cada domingo)
+/menu — muestra los botones de abajo (Hoy, Resumen, Por pagar…)`;
 
 /** Qué tan bien se parece `nombre` a lo que escribió el usuario: exacto 3, empieza una palabra 2, contiene 1. */
 function parecido(nombre: string, busqueda: string): number {
@@ -93,8 +99,14 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
   const args = resto.join(' ');
   const cmd = comando.toLowerCase().replace(/@\w+$/, ''); // quita @nombre_bot en grupos
 
+  // Los botones del menú fijo llegan como texto ("Hoy", "Por pagar"…)
+  const delMenu: Record<string, string> = { hoy: '/hoy', resumen: '/resumen', 'por pagar': '/pendientes', metas: '/metas', tarjetas: '/tarjetas', deshacer: '/deshacer', menu: '/menu', 'menú': '/menu' };
+  const atajo = delMenu[texto.toLowerCase()];
+  if (atajo) return manejarMensaje(atajo);
+
   switch (cmd) {
     case '/start':
+      return { texto: AYUDA, botones: [], menu: true };
     case '/ayuda':
     case '/help':
       return AYUDA;
@@ -135,6 +147,16 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
       return yaPague(args);
     case '/retos':
       return textoRetos();
+    case '/categoria':
+    case '/categoría':
+    case '/categorias':
+    case '/categorías':
+      return comandoCategoria(args);
+    case '/semana':
+      return { texto: 'Te mando el resumen de la semana 📊', botones: [], semana: true };
+    case '/menu':
+    case '/menú':
+      return { texto: 'Aquí tienes el menú abajo. Toca una opción o escríbeme un gasto como siempre.', botones: [], menu: true };
     case '/sesiones':
       return textoSesiones();
     case '/cerrarsesiones':
@@ -236,7 +258,7 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
 
   // La IA solo entra si el intérprete no entendió o no supo la categoría.
   if (!dato || (dato.tipo === 'gasto' && !dato.categoria)) {
-    const ia = await interpretarConIA(texto);
+    const ia = await interpretarConIA(texto, await db.nombresPropios());
     if (ia.ok) {
       usoIA = true;
       // Si ya teníamos monto y concepto, de la IA solo tomamos la categoría.
@@ -262,167 +284,164 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
   }
 
   const cuentaId = cuenta?.c.id ?? null;
-  const saldoNuevo = cuenta ? cuenta.c.saldo + (dato.tipo === 'ingreso' ? dato.monto : -dato.monto) : 0;
-  const lineaCuenta = cuenta
-    ? cuenta.c.banco === 'efectivo' && cuenta.c.saldo === 0 && saldoNuevo < 0
-      ? `Lo anoté en tu <b>Efectivo</b>. ¿Cuánto tienes en la billetera? Dímelo así: <code>/saldo efectivo 100000</code>`
-      : `${dato.tipo === 'ingreso' ? 'Entró a' : 'Salió de'} <b>${esc(cuenta.c.nombre)}</b> · saldo ${pesos(saldoNuevo)}${saldoNuevo < 0 ? ' ⚠️ quedó en negativo, revisa el saldo' : ''}`
-    : '';
   // "tengo 50 mil en efectivo" → el ingreso se llama como la cuenta, no "Saldo disponible"
   if (cuenta && dato.tipo === 'ingreso' && (dato.concepto === 'Saldo disponible' || dato.concepto === 'Ingreso')) dato = { ...dato, concepto: cuenta.c.nombre };
+  const otroMonto = preguntaMonto ? (dato.monto === preguntaMonto.pesos ? preguntaMonto.mil : preguntaMonto.pesos) : null;
 
   if (dato.tipo === 'ingreso') {
     const idIngreso = await db.insertarIngreso({ concepto: dato.concepto, monto: dato.monto, cuentaId });
-    const r = await db.resumen();
-    const texto = [
-      `💰 Ingreso registrado: <b>${esc(dato.concepto)}</b> ${pesos(dato.monto)}`,
-      lineaCuenta,
-      preguntar ? '' : `Libre: <b>${pesos(r.disponible)}</b>`,
-      !preguntar && r.disponible > 0 ? `Hoy puedes gastar hasta <b>${pesos(r.presupuestoHoy)}</b> (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '',
-    ].filter(Boolean).join('\n');
-    const botones = [...(preguntaMonto ? botonesMonto('i', idIngreso, preguntaMonto) : []), ...(preguntar ? botonesCuentas('i', idIngreso, todas) : [])];
-    const preguntas = [preguntaMonto ? textoPreguntaMonto(preguntaMonto) : '', preguntar ? '¿A dónde entró?' : ''].filter(Boolean);
-    return botones.length ? { texto: [texto, ...preguntas].join('\n'), botones } : texto;
+    if (otroMonto) await db.guardarDuda('ingreso', idIngreso, otroMonto);
+    const t = await tarjetaIngreso(idIngreso);
+    return t ?? 'Listo.';
   }
 
   const categoria = dato.categoria ?? 'Otros';
   const idGasto = await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoOriginal, cuentaId });
-  const r = await db.resumen();
-  const quedaHoy = r.presupuestoHoy - r.gastadoHoy;
-
-  const lineas = [`✅ <b>${esc(dato.concepto)}</b> ${pesos(dato.monto)} · ${categoria}${usoIA ? ' 🤖' : ''}`];
-  if (lineaCuenta) lineas.push(lineaCuenta);
-  if (r.modo === 'mes' && r.ingresos === 0) {
-    lineas.push('Aún no registras ingresos este mes. Escríbeme <code>me pagaron 1100000</code> o <code>tengo 300 mil</code> para calcular cuánto te alcanza.');
-  } else if (r.disponible < 0) {
-    lineas.push(`⚠️ Vas <b>${pesos(-r.disponible)}</b> por encima de lo que tienes este mes.`);
-  } else if (quedaHoy >= 0) {
-    lineas.push(`Hoy te quedan <b>${pesos(quedaHoy)}</b> de ${pesos(r.presupuestoHoy)}. Libre en el mes: ${pesos(r.disponible)}.`);
-  } else {
-    lineas.push(`⚠️ Hoy te pasaste <b>${pesos(-quedaHoy)}</b> del límite (${pesos(r.presupuestoHoy)}). Mañana el límite baja para compensar.`);
+  if (otroMonto) await db.guardarDuda('gasto', idGasto, otroMonto);
+  const extra: string[] = [];
+  if (cuenta?.c.banco === 'efectivo' && cuenta.c.saldo === 0) {
+    extra.push('Lo anoté en tu <b>Efectivo</b>. ¿Cuánto tienes en la billetera? Dímelo así: <code>/saldo efectivo 100000</code>');
   }
-  const tope = r.topes[categoria];
-  if (tope) {
-    const usado = r.porCategoria.find((c) => c.categoria === categoria)?.total ?? 0;
-    const pct = Math.round((usado / tope) * 100);
-    lineas.push(
-      usado > tope
-        ? `🔴 ${categoria}: te pasaste del tope (${pesos(usado)} de ${pesos(tope)}).`
-        : pct >= 80
-          ? `🟠 ${categoria}: llevas ${pesos(usado)} de ${pesos(tope)} (${pct} %). Ojo con lo que queda del mes.`
-          : `${categoria}: ${pesos(usado)} de ${pesos(tope)} (${pct} %).`,
-    );
-  }
-  if (categoria === 'Otros') lineas.push('¿Categoría equivocada? Corrígela con /cat Comida (o la que sea).');
   for (const x of await retosParaAvisar()) {
-    lineas.push(x.estado === 'roto'
-      ? `💔 Se rompió tu reto <b>${esc(x.nombre)}</b> (ibas ${x.cumplidos} de ${x.meta}). ¡Vuelve a intentarlo con /reto!`
+    extra.push(x.estado === 'roto'
+      ? `💔 Se rompió tu reto <b>${esc(x.nombre)}</b> (ibas ${x.cumplidos} de ${x.meta}). Vuelve a intentarlo con /reto`
       : `🏆 ¡Lograste tu reto <b>${esc(x.nombre)}</b>!`);
   }
-  const botones = [...(preguntaMonto ? botonesMonto('g', idGasto, preguntaMonto) : []), ...(preguntar ? botonesCuentas('g', idGasto, todas) : [])];
-  const preguntas = [preguntaMonto ? textoPreguntaMonto(preguntaMonto) : '', preguntar ? '¿De dónde salió?' : ''].filter(Boolean);
-  if (botones.length) return { texto: [...lineas, ...preguntas].join('\n'), botones };
-  return lineas.join('\n');
-}
-
-const textoPreguntaMonto = (a: { pesos: number; mil: number }) => `¿Era ${pesos(a.pesos)} o ${pesos(a.mil)}?`;
-
-/** Los dos montos posibles; el dato viaja como "m:g:<id>:<monto>". */
-function botonesMonto(tipo: 'g' | 'i', id: number, a: { pesos: number; mil: number }): Boton[][] {
-  return [[
-    { texto: `Era ${pesos(a.pesos)}`, dato: `m:${tipo}:${id}:${a.pesos}` },
-    { texto: `Era ${pesos(a.mil)}`, dato: `m:${tipo}:${id}:${a.mil}` },
-  ]];
-}
-
-/** Un botón por cuenta (de a 3 por fila). El dato viaja como "c:g:<id del gasto>:<id de la cuenta>". */
-function botonesCuentas(tipo: 'g' | 'i', id: number, cuentas: db.Cuenta[]): Boton[][] {
-  const botones = cuentas.slice(0, 9).map((c) => ({ texto: c.nombre, dato: `c:${tipo}:${id}:${c.id}` }));
-  const filas: Boton[][] = [];
-  for (let i = 0; i < botones.length; i += 3) filas.push(botones.slice(i, i + 3));
-  return filas;
+  const t = await tarjetaGasto(idGasto, { extra, usoIA });
+  return t ?? 'Listo.';
 }
 
 /**
- * Cuando tocas un botón de cuenta: le pone esa cuenta al gasto/ingreso y ajusta el saldo.
- * Devuelve la línea para reemplazar la pregunta en el mensaje, o null si el botón no es de cuentas.
+ * Toques de botones (del bot o de la paleta web). Cada uno vuelve a dibujar la tarjeta del movimiento.
+ *  m:<g|i>:<id>:<monto>   confirma el monto en duda
+ *  c:<g|i>:<id>:<cuenta>  le pone cuenta a un movimiento sin cuenta
+ *  a:<g|i>:<id>           abre la lista de cuentas · cc:<g|i>:<id>:<cuenta> la cambia
+ *  k:<id>                 abre las categorías     · k:<id>:<nombre> la cambia (y aprende)
+ *  d:<g|i>:<id>           deshace (borra y devuelve la plata a la cuenta)
+ *  v:<g|i>:<id>           vuelve a la tarjeta
  */
-export async function procesarBoton(dato: string): Promise<{ linea: string; aviso: string; pregunta: 'cuenta' | 'monto' } | null> {
+export async function procesarBoton(dato: string): Promise<{ aviso: string; texto?: string; botones?: Boton[][] }> {
   await asegurarEsquema();
-  const monto = dato.match(/^m:(g|i):(\d+):(\d+)$/);
-  if (monto) {
-    const tipo = monto[1] === 'g' ? 'gasto' : 'ingreso';
-    const r = await db.corregirMonto(tipo, Number(monto[2]), Number(monto[3]));
-    if (!r) return { linea: '', aviso: 'Ese movimiento ya no existe.', pregunta: 'monto' };
-    return { linea: `Monto: <b>${pesos(r.monto)}</b> ✓`, aviso: `Quedó en ${pesos(r.monto)}`, pregunta: 'monto' };
-  }
-  const m = dato.match(/^c:(g|i):(\d+):(\d+)$/);
-  if (!m) return null;
-  const tipo = m[1] === 'g' ? 'gasto' : 'ingreso';
-  const r = await db.asignarCuenta(tipo, Number(m[2]), Number(m[3]));
-  if (!r) return { linea: '', aviso: 'Ese movimiento ya tenía cuenta.', pregunta: 'cuenta' };
-  const verbo = tipo === 'gasto' ? 'Salió de' : 'Entró a';
-  return {
-    linea: `${verbo} <b>${esc(r.cuenta)}</b> · saldo ${pesos(r.saldo)}${r.saldo < 0 ? ' ⚠️ quedó en negativo, revisa el saldo' : ''}`,
-    aviso: `${verbo} ${r.cuenta}`,
-    pregunta: 'cuenta',
+  const tarjeta = async (tipo: string, id: number, abierto: 'categoria' | 'cuenta' | null = null) =>
+    tipo === 'g' ? tarjetaGasto(id, { abierto }) : tarjetaIngreso(id, { abierto: abierto === 'categoria' ? null : abierto });
+  const conTarjeta = async (aviso: string, tipo: string, id: number, abierto: 'categoria' | 'cuenta' | null = null) => {
+    const t = await tarjeta(tipo, id, abierto);
+    return t ? { aviso, texto: t.texto, botones: t.botones } : { aviso: 'Ese movimiento ya no existe.', texto: '<i>Este movimiento ya no existe.</i>', botones: [] };
   };
+
+  let m = dato.match(/^m:(g|i):(\d+):(\d+)$/);
+  if (m) {
+    const tipo = m[1] === 'g' ? 'gasto' : 'ingreso';
+    const r = await db.corregirMonto(tipo, Number(m[2]), Number(m[3]));
+    await db.guardarDuda(tipo, Number(m[2]), null);
+    return conTarjeta(r ? `Quedó en ${pesos(r.monto)}` : 'Ese movimiento ya no existe.', m[1], Number(m[2]));
+  }
+  m = dato.match(/^c:(g|i):(\d+):(\d+)$/);
+  if (m) {
+    const r = await db.asignarCuenta(m[1] === 'g' ? 'gasto' : 'ingreso', Number(m[2]), Number(m[3]));
+    return conTarjeta(r ? `${m[1] === 'g' ? 'Salió de' : 'Entró a'} ${r.cuenta}` : 'Ya tenía cuenta', m[1], Number(m[2]));
+  }
+  m = dato.match(/^cc:(g|i):(\d+):(\d+)$/);
+  if (m) {
+    const r = await db.cambiarCuenta(m[1] === 'g' ? 'gasto' : 'ingreso', Number(m[2]), Number(m[3]));
+    return conTarjeta(r ? (r.mismo ? 'Ya estaba en esa cuenta' : 'Cuenta cambiada') : 'Ese movimiento ya no existe.', m[1], Number(m[2]));
+  }
+  m = dato.match(/^a:(g|i):(\d+)$/);
+  if (m) return conTarjeta('Elige la cuenta', m[1], Number(m[2]), 'cuenta');
+  m = dato.match(/^v:(g|i):(\d+)$/);
+  if (m) return conTarjeta(' ', m[1], Number(m[2]));
+  m = dato.match(/^k:(\d+)$/);
+  if (m) return conTarjeta('Elige la categoría', 'g', Number(m[1]), 'categoria');
+  m = dato.match(/^k:(\d+):(.+)$/);
+  if (m) {
+    const r = await cambiarCategoria(Number(m[1]), m[2]);
+    return conTarjeta(r ?? 'No encontré esa categoría', 'g', Number(m[1]));
+  }
+  m = dato.match(/^d:(g|i):(\d+)$/);
+  if (m) {
+    const id = Number(m[2]);
+    const mov = m[1] === 'g' ? await db.gastoPorId(id) : await db.ingresoPorId(id);
+    if (!mov) return { aviso: 'Ya estaba borrado', texto: '<i>Este movimiento ya no existe.</i>', botones: [] };
+    if (m[1] === 'g') await db.borrarGasto(id);
+    else await db.borrarIngreso(id);
+    const cuenta = mov.cuentaId ? (await db.cuentas()).find((c) => c.id === mov.cuentaId) : undefined;
+    return {
+      aviso: 'Deshecho',
+      texto: `<s>${esc(mov.concepto)} · ${pesos(mov.monto)}</s>\nLo deshice.${cuenta ? ` ${esc(cuenta.nombre)} volvió a ${pesos(cuenta.saldo)}.` : ''}`,
+      botones: [],
+    };
+  }
+  return { aviso: 'Ese botón ya no sirve' };
 }
 
 async function textoResumen(): Promise<string> {
-  const r = await db.resumen();
+  const [r, propias] = await Promise.all([db.resumen(), db.categoriasPropias()]);
+  const total = r.porCategoria.reduce((x, c) => x + c.total, 0);
   const cats = r.porCategoria.length
-    ? r.porCategoria.map((c) => `• ${esc(c.categoria)}: ${pesos(c.total)}`).join('\n')
-    : '• Aún no registras gastos este mes.';
-  const hoyTxt = r.disponible > 0 ? `Hoy puedes gastar ~${pesos(r.presupuestoHoy)} (faltan ${r.proximoPago.dias} días para el ${r.proximoPago.dia}).` : '';
-  if (r.modo === 'cuentas') {
-    const pend = r.pendientes.length
-      ? `Por pagar este mes: −${pesos(r.totalPendiente)}\n${r.pendientes.slice(0, 6).map((p) => `   • ${esc(p.nombre)} ${pesos(p.monto)}`).join('\n')}`
-      : 'Por pagar este mes: nada ✓';
-    return `<b>💰 Tu plata hoy</b>
-En cuentas y efectivo: ${pesos(r.enCuentas)}
-${pend}${r.apartadoMetas ? `\nApartado en metas: −${pesos(r.apartadoMetas)}` : ''}
-<b>Te queda libre: ${pesos(r.disponible)}</b>
-${hoyTxt}
+    ? r.porCategoria.slice(0, 8).map((c) => `${esc(conEmoji(c.categoria, propias))}  ${barra(c.total / (r.porCategoria[0]?.total || 1), 6)}  ${pesos(c.total)} <i>(${Math.round((c.total / total) * 100)} %)</i>`).join('\n')
+    : 'Aún no registras gastos este mes.';
+  const cabeza = r.modo === 'cuentas'
+    ? [
+        '<b>Tu plata hoy</b>',
+        `En cuentas y efectivo: ${pesos(r.enCuentas)}`,
+        `Por pagar este mes: −${pesos(r.totalPendiente)}`,
+        ...(r.apartadoMetas ? [`Apartado en metas: −${pesos(r.apartadoMetas)}`] : []),
+        `<b>Te queda libre: ${pesos(r.disponible)}</b>`,
+      ]
+    : [
+        '<b>Este mes</b>',
+        `Ingresos: ${pesos(r.ingresos)}`,
+        `Cuotas: −${pesos(r.cuotas)}`,
+        `Gastos fijos: −${pesos(r.fijos)}`,
+        `Día a día: −${pesos(r.variables)}`,
+        ...(r.extraAbonos ? [`Abonos extra: −${pesos(r.extraAbonos)}`] : []),
+        `<b>Te queda libre: ${pesos(r.disponible)}</b>`,
+      ];
+  const hoy = r.disponible > 0 && r.presupuestoHoy > 0
+    ? `\n<b>Hoy</b>  ${barra(r.gastadoHoy / r.presupuestoHoy)}  ${pesos(r.gastadoHoy)} de ${pesos(r.presupuestoHoy)}\n${r.proximoPago.dias} días para el ${r.proximoPago.dia}`
+    : '';
+  const avance = r.diaHoy / r.diasMes;
+  return `${cabeza.join('\n')}${hoy}
 
-<b>📊 Este mes</b>
-Entró ${pesos(r.ingresos)} · gastos ${pesos(r.variables)} · cuotas ${pesos(r.cuotas)} · fijos ${pesos(r.fijos)}
+<b>El mes</b>  ${barra(avance)}  día ${r.diaHoy} de ${r.diasMes}
+Entró ${pesos(r.ingresos)} · gastaste ${pesos(r.variables)}${r.modo === 'cuentas' ? ` · cuotas ${pesos(r.cuotas)} · fijos ${pesos(r.fijos)}` : ''}
 
 <b>En qué se va tu plata</b>
-${cats}`;
-  }
-  return `<b>📊 Este mes</b>
-Ingresos: ${pesos(r.ingresos)}
-Cuotas de deudas: −${pesos(r.cuotas)}
-Gastos fijos: −${pesos(r.fijos)}
-Gastos del día a día: −${pesos(r.variables)}${r.extraAbonos ? `\nAbonos extra a deudas: −${pesos(r.extraAbonos)}` : ''}
-<b>Te queda libre: ${pesos(r.disponible)}</b>
-${hoyTxt}
-Tip: registra tus cuentas y efectivo en el dashboard (Billetera) y te digo cuánto tienes de verdad.
-
-<b>En qué se va tu plata</b>
-${cats}`;
+${cats}${r.modo === 'mes' ? '\n\n<i>Tip: registra tus cuentas y efectivo en Billetera y te digo cuánto tienes de verdad.</i>' : ''}`;
 }
 
 async function textoHoy(): Promise<string> {
-  const [gs, r] = await Promise.all([db.gastosDeHoy(), db.resumen()]);
-  const cabecera = (r.modo === 'cuentas' || r.ingresos > 0) && r.disponible > 0
-    ? `<b>Hoy puedes gastar ${pesos(r.presupuestoHoy)}</b> · llevas ${pesos(r.gastadoHoy)}`
+  const [gs, r, propias] = await Promise.all([db.gastosDeHoy(), db.resumen(), db.categoriasPropias()]);
+  const conLimite = (r.modo === 'cuentas' || r.ingresos > 0) && r.disponible > 0 && r.presupuestoHoy > 0;
+  const queda = r.presupuestoHoy - r.gastadoHoy;
+  const cabecera = conLimite
+    ? [
+        `<b>Hoy puedes gastar ${pesos(r.presupuestoHoy)}</b>`,
+        `${barra(r.gastadoHoy / r.presupuestoHoy)}  ${Math.round((r.gastadoHoy / r.presupuestoHoy) * 100)} %`,
+        queda >= 0 ? `Llevas ${pesos(r.gastadoHoy)} · te quedan <b>${pesos(queda)}</b>` : `Llevas ${pesos(r.gastadoHoy)} · te pasaste <b>${pesos(-queda)}</b>`,
+      ].join('\n')
     : '<b>Hoy</b>';
-  if (!gs.length) return `${cabecera}\nNo has registrado gastos hoy 👌`;
-  return `${cabecera}\n${gs.map((g) => `• ${esc(g.concepto)} ${pesos(g.monto)} (${esc(g.categoria)})`).join('\n')}`;
+  if (!gs.length) return `${cabecera}\n\n<i>Aún no gastas nada hoy 👌</i>`;
+  return `${cabecera}\n\n${gs.map((g) => `${esc(conEmoji(g.categoria, propias))} · ${esc(g.concepto)}  <b>${pesos(g.monto)}</b>`).join('\n')}`;
 }
 
 async function textoPendientes(): Promise<string> {
   const r = await db.resumen();
   if (!r.pendientes.length) {
     return r.cuotas + r.fijos > 0
-      ? '🎉 Ya pagaste todas las cuotas y gastos fijos de este mes.'
+      ? '🎉 <b>¡Al día!</b> Ya pagaste todas las cuotas y gastos fijos de este mes.'
       : 'Aún no tienes gastos fijos ni deudas registradas. Agrégalos en el dashboard para saber qué te falta pagar.';
   }
-  return `<b>Te falta pagar este mes</b>\n${r.pendientes
-    .map((p) => `• ${esc(p.nombre)} ${pesos(p.monto)}${p.tipo === 'cuota' ? ' (cuota)' : ''}`)
-    .join('\n')}\n<b>Total: ${pesos(r.totalPendiente)}</b>\n\nCuando pagues uno: <code>/pague gimnasio</code>`;
+  const pagado = r.cuotas + r.fijos - r.totalPendiente;
+  const ratio = r.cuotas + r.fijos > 0 ? pagado / (r.cuotas + r.fijos) : 0;
+  return `<b>Te falta pagar ${pesos(r.totalPendiente)}</b>
+${barra(ratio)}  ${Math.round(ratio * 100)} % pagado
+
+${r.pendientes
+    .map((p) => `${p.diaPago && p.diaPago < r.diaHoy ? '🔴' : p.diaPago && p.diaPago - r.diaHoy <= 3 ? '🟠' : '▫️'} ${esc(p.nombre)}  <b>${pesos(p.monto)}</b>${p.diaPago ? ` · ${p.diaPago < r.diaHoy ? 'venció el' : 'vence el'} ${p.diaPago}` : ''}${p.tipo === 'cuota' ? ' <i>(cuota)</i>' : ''}`)
+    .join('\n')}
+
+Cuando pagues uno: <code>/pague gimnasio</code>`;
 }
 
 async function textoConsejos(): Promise<string> {
@@ -457,17 +476,45 @@ async function borrarUltimo(): Promise<string> {
 }
 
 async function corregirCategoria(args: string): Promise<string> {
-  const categoria = normalizarCategoria(args);
-  if (!categoria) return `Dime la categoría, por ejemplo /cat Salidas\nOpciones: ${CATEGORIAS.join(', ')}`;
+  const propias = await db.nombresPropios();
+  const categoria = normalizarCategoria(args, propias);
+  if (!categoria) return `Dime la categoría, por ejemplo /cat Salidas\nOpciones: ${[...CATEGORIAS, ...propias].join(', ')}`;
   const g = await db.ultimoGasto();
   if (!g) return 'No hay gastos para corregir.';
-  await db.actualizarGasto(g.id, { concepto: g.concepto, monto: g.monto, categoria });
+  return (await cambiarCategoria(g.id, categoria)) ?? 'No pude cambiarla.';
+}
 
+/** Cambia la categoría de un gasto y aprende sus palabras para la próxima. */
+async function cambiarCategoria(id: number, nombre: string): Promise<string | null> {
+  const propias = await db.categoriasPropias();
+  const categoria = normalizarCategoria(nombre, propias.map((p) => p.nombre));
+  const g = await db.gastoPorId(id);
+  if (!categoria || !g) return null;
+  await db.actualizarGasto(g.id, { concepto: g.concepto, monto: g.monto, categoria });
   const palabras = sinTildes(g.concepto.toLowerCase())
     .split(/[^\p{L}\d]+/u)
     .filter((p) => p.length >= 3 && !PALABRAS_VACIAS.has(p));
   await db.aprenderPalabras(palabras, categoria);
-  return `Listo: <b>${esc(g.concepto)}</b> ahora es ${categoria}. La próxima vez lo clasifico solo 👍`;
+  return `${g.concepto} ahora es ${conEmoji(categoria, propias)}. La próxima vez lo clasifico solo`;
+}
+
+/** /categoria Mascotas 🐶 · /categoria borrar Mascotas · /categorias */
+async function comandoCategoria(args: string): Promise<string> {
+  const propias = await db.categoriasPropias();
+  if (!args.trim()) return textoCategorias(propias);
+  const borrar = args.match(/^(borrar|eliminar|quitar)\s+(.+)$/i);
+  if (borrar) {
+    const c = normalizarCategoria(borrar[2], propias.map((p) => p.nombre));
+    if (!c || !propias.some((p) => p.nombre === c)) return 'Solo puedes borrar categorías que creaste tú. Mira la lista con /categorias';
+    await db.borrarCategoria(c);
+    return `Borré la categoría <b>${esc(c)}</b>. Sus gastos pasaron a 📦 Otros.`;
+  }
+  const emoji = args.match(/\p{Extended_Pictographic}(\uFE0F|\u200D\p{Extended_Pictographic})*/u)?.[0] ?? null;
+  const nombre = await db.crearCategoria(args, emoji, null);
+  if (!nombre) return 'Escribe el nombre, por ejemplo: <code>/categoria Mascotas 🐶</code>';
+  if ((CATEGORIAS as readonly string[]).includes(nombre)) return `${esc(conEmoji(nombre))} ya existe.`;
+  const lista = await db.categoriasPropias();
+  return `Listo, creé la categoría <b>${esc(conEmoji(nombre, lista))}</b>.\nÚsala con el botón <b>Categoría</b> de cualquier gasto o con <code>/cat ${esc(nombre)}</code>. Con eso aprendo y la próxima vez la pongo solo.`;
 }
 
 async function abonar(args: string, tipo: 'cuota' | 'capital' = 'cuota'): Promise<string> {
@@ -714,8 +761,9 @@ async function transferirCuentas(args: string, natural = false): Promise<string>
 async function topes(args: string): Promise<string> {
   const m = extraerMonto(args);
   if (m) {
-    const categoria = normalizarCategoria(m.resto);
-    if (!categoria) return `¿Para qué categoría? Ej: <code>/tope salidas 150000</code>\nOpciones: ${CATEGORIAS.join(', ')}`;
+    const propias = await db.nombresPropios();
+    const categoria = normalizarCategoria(m.resto, propias);
+    if (!categoria) return `¿Para qué categoría? Ej: <code>/tope salidas 150000</code>\nOpciones: ${[...CATEGORIAS, ...propias].join(', ')}`;
     await db.guardarTope(categoria, m.monto);
     return `Listo: tope de <b>${categoria}</b> en ${pesos(m.monto)} al mes. Te aviso cuando vayas en 80 %.`;
   }
@@ -734,12 +782,12 @@ async function topes(args: string): Promise<string> {
 async function textoMetas(): Promise<string> {
   const ms = await db.metas();
   if (!ms.length) return 'No tienes metas de ahorro. Créalas en el dashboard, pestaña Plan (ej. fondo de emergencia).';
-  return `<b>🎯 Tus metas</b>\n${ms
+  return `<b>🎯 Tus metas</b>\n\n${ms
     .map((m) => {
       const pct = m.objetivo ? Math.min(100, Math.round((m.ahorrado / m.objetivo) * 100)) : 0;
-      return `• <b>${esc(m.nombre)}</b>: ${pesos(m.ahorrado)} de ${pesos(m.objetivo)} (${pct} %)${m.fechaMeta ? ` · para el ${m.fechaMeta.split('-').reverse().join('/')}` : ''}`;
+      return `<b>${esc(m.nombre)}</b>${m.fechaMeta ? ` · para el ${m.fechaMeta.split('-').reverse().join('/')}` : ''}\n${barra(pct / 100)}  ${pct} %  ·  ${pesos(m.ahorrado)} de ${pesos(m.objetivo)}`;
     })
-    .join('\n')}\n\nPara aportar: <code>aparté 100 mil para ${esc(ms[0].nombre.toLowerCase())}</code>`;
+    .join('\n\n')}\n\nPara aportar: <code>aparté 100 mil para ${esc(ms[0].nombre.toLowerCase())}</code>`;
 }
 
 async function ahorrar(args: string, natural = false): Promise<string> {

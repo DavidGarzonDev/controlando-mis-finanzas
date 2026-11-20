@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { marcarCuota } from '@/app/actions';
 import { Contador } from './animacion';
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, CalendarClock, Check, HandCoins, Landmark, Plus, ShoppingCart, TrendingUp } from 'lucide-react';
-import { Plastico } from './Plastico';
+import { Plastico, Reverso, useGiroscopio } from './Plastico';
 import { mesDentroDe, planDeudas, simularPago, tasaMensual } from '@/lib/consejos';
 import { CurvaPatrimonio } from './graficas';
 import type { Cuenta, Deuda, MovCredito, PuntoPatrimonio, Resumen } from '@/lib/datos';
@@ -24,11 +24,14 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
   const orden = new Map(activas.map((d, i) => [d.id, i + 1]));
   const [sel, setSel] = useState<number | null>(tarjetas[0]?.id ?? null);
   const elegida = tarjetas.find((t) => t.id === sel) ?? tarjetas[0];
+  const [volteada, setVolteada] = useState(false);
+  const raiz = useRef<HTMLDivElement>(null);
+  const pedirGiro = useGiroscopio(raiz);
   const cupoTotal = tarjetas.reduce((s, t) => s + (t.cupo ?? 0), 0);
   const usadoTotal = tarjetas.reduce((s, t) => s + (t.cupo ? t.saldo : 0), 0);
 
   return (
-    <div className="columna ancha">
+    <div className="columna ancha" ref={raiz}>
       <div className="resumen-linea">
         <div><span>Tienes en cuentas</span><b className="num pos"><Contador valor={enCuentas} /></b></div>
         <div><span>Debes en total</span><b className="num"><Contador valor={total} /></b></div>
@@ -102,12 +105,19 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
                 role="option"
                 aria-selected={t.id === elegida?.id}
                 className={t.id === elegida?.id ? 'tarjeta-slot elegida' : 'tarjeta-slot'}
-                onClick={() => setSel(t.id)}
+                onClick={() => {
+                  void pedirGiro();
+                  // Tocar la tarjeta elegida la voltea; tocar otra la elige.
+                  if (t.id === elegida?.id) setVolteada((v) => !v);
+                  else { setSel(t.id); setVolteada(false); }
+                }}
+                aria-label={t.id === elegida?.id ? `${t.nombre}. Toca para ${volteada ? 'ver el frente' : 'voltearla'}` : `Elegir ${t.nombre}`}
               >
-                <TarjetaCredito t={t} />
+                <TarjetaCredito t={t} volteada={t.id === elegida?.id && volteada} />
               </button>
             ))}
           </div>
+          <p className="pista-volteo">Toca la tarjeta de adelante para ver su reverso</p>
 
           {elegida && (
             <section className="tarjeta-detalle" aria-label={`Detalle de ${elegida.nombre}`}>
@@ -201,8 +211,24 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
   );
 }
 
-function TarjetaCredito({ t }: { t: Deuda }) {
+function TarjetaCredito({ t, volteada = false }: { t: Deuda; volteada?: boolean }) {
   const disponible = t.cupo ? t.cupo - t.saldo : null;
+  const filas = [
+    ...(t.cupo ? [{ etiqueta: 'Cupo total', valor: pesos(t.cupo) }, { etiqueta: 'Usado', valor: pesos(t.saldo) }] : [{ etiqueta: 'Debes', valor: pesos(t.saldo) }]),
+    { etiqueta: 'Cuota del mes', valor: pesos(t.cuota) },
+    { etiqueta: 'Corte', valor: t.diaCorte ? `Día ${t.diaCorte}` : '—' },
+    { etiqueta: 'Pago', valor: t.diaPago ? `Día ${t.diaPago}` : '—' },
+    { etiqueta: 'Tasa', valor: t.tasa || '—' },
+  ];
+  return (
+    <span className={`volteo ${volteada ? 'on' : ''}`}>
+      <span className="cara frente"><FrenteCredito t={t} disponible={disponible} /></span>
+      <span className="cara atras" aria-hidden={!volteada}><Reverso d={t} filas={filas} /></span>
+    </span>
+  );
+}
+
+function FrenteCredito({ t, disponible }: { t: Deuda; disponible: number | null }) {
   return (
     <Plastico
       d={t}

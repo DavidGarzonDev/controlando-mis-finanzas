@@ -8,9 +8,10 @@ import {
   registrarAbono, registrarCompra, transferir,
 } from '@/app/actions';
 import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
-import { CATEGORIAS } from '@/lib/categorias';
 import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, Meta, Resumen, TipoCredito, Transferencia } from '@/lib/datos';
-import { COLOR_CAT, ICONO_CAT, pesos } from './util';
+import { colorCat, pesos, todasCategorias } from './util';
+import { IconoCat } from './IconoCat';
+import { RegistroRapido } from './Registro';
 import { Plastico, SelloBanco } from './Plastico';
 
 export type Editor =
@@ -94,6 +95,10 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
 
   async function enviar(fd: FormData) {
     setError('');
+    if ((tipo === 'gasto' || tipo === 'ingreso') && !Number(String(fd.get('monto') ?? '').replace(/\D/g, ''))) {
+      setError('Escribe el monto con el teclado.');
+      return;
+    }
     try {
       await accion(fd);
       avisar(mensaje);
@@ -153,7 +158,15 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           </div>
         )}
 
-        {tipo === 'gasto' && (
+        {editor.tipo === 'nuevo' && (modo === 'gasto' || modo === 'ingreso') && (
+          <RegistroRapido
+            key={modo}
+            modo={modo}
+            cuenta={<SelectorCuenta cuentas={cuentas} etiqueta={modo === 'gasto' ? '¿Con qué pagaste?' : '¿A dónde entró?'} defecto={cuentas.find((c) => c.principal)?.id ?? null} />}
+          />
+        )}
+
+        {tipo === 'gasto' && editor.tipo !== 'nuevo' && (
           <>
             <Campo label="Monto"><Monto name="monto" defaultValue={item?.monto} autoFocus /></Campo>
             <Campo label="¿En qué?"><input name="concepto" required defaultValue={item?.concepto} placeholder="Almuerzo" autoComplete="off" /></Campo>
@@ -163,12 +176,11 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
             ) : (
               <fieldset className="cats-sel">
                 <legend>Categoría</legend>
-                {CATEGORIAS.map((c) => {
-                  const Icono = ICONO_CAT[c];
+                {todasCategorias().map((c) => {
                   return (
-                    <label key={c} style={{ '--c': COLOR_CAT[c] } as React.CSSProperties}>
+                    <label key={c} style={{ '--c': colorCat(c) } as React.CSSProperties}>
                       <input type="radio" name="categoria" value={c} defaultChecked={(item?.categoria ?? 'Comida') === c} />
-                      <span><Icono size={16} aria-hidden /> {c}</span>
+                      <span><IconoCat c={c} /> {c}</span>
                     </label>
                   );
                 })}
@@ -177,7 +189,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           </>
         )}
 
-        {tipo === 'ingreso' && (
+        {tipo === 'ingreso' && editor.tipo !== 'nuevo' && (
           <>
             <FormIngreso item={item} />
             <SelectorCuenta cuentas={cuentas} etiqueta="¿A dónde entró?" defecto={item ? item.cuentaId ?? null : cuentas.find((c) => c.principal)?.id ?? null} />
@@ -500,12 +512,11 @@ function FormTopes({ r }: { r: Resumen }) {
     <>
       <p className="nota">Deja en blanco las categorías sin tope. Al lado ves cuánto llevas este mes.</p>
       <div className="topes-form">
-        {CATEGORIAS.map((c) => {
-          const Icono = ICONO_CAT[c];
+        {todasCategorias().map((c) => {
           const usado = r.porCategoria.find((x) => x.categoria === c)?.total ?? 0;
           return (
-            <label key={c} className="tope-campo" style={{ '--c': COLOR_CAT[c] } as React.CSSProperties}>
-              <span className="tope-campo-cab"><span className="cat-ico"><Icono size={16} aria-hidden /></span> {c}<small>lleva {pesos(usado)}</small></span>
+            <label key={c} className="tope-campo" style={{ '--c': colorCat(c) } as React.CSSProperties}>
+              <span className="tope-campo-cab"><span className="cat-ico"><IconoCat c={c} /></span> {c}<small>lleva {pesos(usado)}</small></span>
               <Monto name={`tope_${c}`} defaultValue={r.topes[c]} opcional />
             </label>
           );

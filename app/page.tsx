@@ -15,6 +15,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
   const esActual = mes === mesClave();
   if (esActual) await db.registrarPatrimonio().catch(() => {});
 
+  const categoriasPropias = await db.categoriasPropias();
   const [resumen, gastos, ingresos, deudas, fijos, porDia, historial, movCredito, cuentas, metas, transferencias, hormiga, suscripciones, patrimonio, meses, retos] =
     await Promise.all([
       db.resumen(mes),
@@ -39,6 +40,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
     <App
       mes={mes}
       meses={meses}
+      categorias={categoriasPropias}
       resumen={resumen}
       gastos={gastos}
       ingresos={ingresos}

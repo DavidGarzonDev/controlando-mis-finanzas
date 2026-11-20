@@ -99,6 +99,14 @@ const SENTENCIAS = [
   `CREATE TABLE IF NOT EXISTS sesiones (
     id TEXT PRIMARY KEY, ip TEXT, agente TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now(),
     expira TIMESTAMPTZ NOT NULL, ultima TIMESTAMPTZ NOT NULL DEFAULT now(), revocada BOOLEAN NOT NULL DEFAULT false)`,
+  // Monto en duda ("700": ¿$700 o $700.000?) hasta que lo confirmes con un botón
+  `ALTER TABLE gastos ADD COLUMN IF NOT EXISTS duda_monto INTEGER`,
+  `ALTER TABLE ingresos ADD COLUMN IF NOT EXISTS duda_monto INTEGER`,
+  // Resumen semanal de los domingos (uno por semana)
+  `CREATE TABLE IF NOT EXISTS resumenes_semanales (semana DATE PRIMARY KEY, enviado TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  // Categorías que crea el usuario, con su emoji y color
+  `CREATE TABLE IF NOT EXISTS categorias_propias (
+    nombre TEXT PRIMARY KEY, emoji TEXT, color TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now())`,
   `CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY, ip TEXT, hasta TIMESTAMPTZ NOT NULL, motivo TEXT, creado TIMESTAMPTZ NOT NULL DEFAULT now())`,
 ];

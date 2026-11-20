@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Aplica el tema elegido antes de pintar, para que no parpadee. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('tema');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('tema');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;if(localStorage.getItem('privado')==='1')document.documentElement.dataset.privado='1'}catch(e){}`,
           }}
         />
       </head>

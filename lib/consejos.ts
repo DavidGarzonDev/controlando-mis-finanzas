@@ -123,13 +123,23 @@ export function generarConsejos(
         titulo: `A este ritmo terminas el mes en ${pesos(finDeMes)}`,
         texto: ingresoEsperado > 0
           ? `Si te entra lo de siempre (unos ${pesos(ingresoEsperado)} más), cerrarías en ${pesos(finDeMes + ingresoEsperado)}. Baja el gasto diario para no depender de eso.`
-          : `Gastas ${pesos(r.ritmo7)} por día. Bajar un poco el ritmo los días que quedan te deja en verde.`,
+          : `Gastas unos ${pesos(r.proyeccion.ritmo)} por día. Bajar un poco el ritmo los días que quedan te deja en verde.`,
       });
     } else if (finDeMes > 50_000 && r.esActual) {
-      out.push({
-        id: 'proyeccion', nivel: 'bien', titulo: `Vas para terminar el mes con ${pesos(finDeMes)} libres`,
-        texto: 'Decide desde ya a dónde va: un abono a capital de tu deuda más cara o tu fondo de emergencia.',
-      });
+      const { diasRestantes, ritmo } = r.proyeccion;
+      // Con muchos días por delante, lo "libre" todavía no sobró: salidas, gasolina y antojos se lo llevan.
+      // Solo al final del mes tiene sentido decidir a dónde va.
+      out.push(
+        diasRestantes > 5
+          ? {
+              id: 'proyeccion', nivel: 'bien', titulo: `Vas bien, pero faltan ${diasRestantes} días`,
+              texto: `A tu ritmo real (unos ${pesos(ritmo)} al día, contando salidas y gasolina) te sobrarían unos ${pesos(finDeMes)}. No lo cuentes todavía: déjalo de colchón y, si al cierre sigue ahí, pásalo a tu meta o abónalo a capital.`,
+            }
+          : {
+              id: 'proyeccion', nivel: 'bien', titulo: `Te van a sobrar unos ${pesos(finDeMes)}`,
+              texto: `Faltan ${diasRestantes} ${diasRestantes === 1 ? 'día' : 'días'}. Para que no se vaya en antojos, pasa ya una parte a tu meta o abónala a la deuda más cara.`,
+            },
+      );
     }
   }
 

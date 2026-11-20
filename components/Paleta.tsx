@@ -116,7 +116,7 @@ export function Paleta({ abierta, cerrar, ir, abrir, mes }: {
                   <button key={b.dato} className="chip" disabled={pendiente}
                     onClick={() => iniciar(async () => {
                       const r = await tocarBoton(b.dato);
-                      setRespuesta({ html: `${respuesta.html.replace(/\n?¿[^\n]*\?\s*$/, '')}\n${r.html}`, botones: [] });
+                      setRespuesta(r);
                     })}>
                     {b.texto}
                   </button>

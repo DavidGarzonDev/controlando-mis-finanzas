@@ -9,20 +9,38 @@ export const CATEGORIAS = [
   'Otros',
 ] as const;
 
-export type Categoria = (typeof CATEGORIAS)[number];
+export type CategoriaBase = (typeof CATEGORIAS)[number];
+/** Una categoría base o una que creaste tú ("Mascotas", "Universidad"…). */
+export type Categoria = string;
 
-export function esCategoria(v: string): v is Categoria {
-  return (CATEGORIAS as readonly string[]).includes(v);
+/** Emoji de cada categoría base (en el bot y en los botones de categoría). */
+export const EMOJI_BASE: Record<string, string> = {
+  Comida: '🍔', Transporte: '🚌', Salidas: '🎉', Compras: '🛍️', Hogar: '🏠',
+  Servicios: '💡', Salud: '💊', Otros: '📦', Ajuste: '⚖️',
+};
+
+/** Categoría propia guardada en la base. */
+export type CategoriaPropia = { nombre: string; emoji: string | null; color: string | null };
+
+export function esCategoria(v: string, propias: readonly string[] = []): boolean {
+  return (CATEGORIAS as readonly string[]).includes(v) || propias.includes(v);
 }
 
-/** Busca una categoría escrita a mano ("salidas", "SALIDAS", "salida") y la normaliza. */
-export function normalizarCategoria(v: string): Categoria | null {
-  const t = sinTildes(v.trim().toLowerCase());
-  for (const c of CATEGORIAS) {
+/** Busca una categoría escrita a mano ("salidas", "SALIDAS", "salida") y la normaliza; también las propias. */
+export function normalizarCategoria(v: string, propias: readonly string[] = []): Categoria | null {
+  const t = sinTildes(v.replace(/\p{Extended_Pictographic}|\uFE0F/gu, '').trim().toLowerCase());
+  if (!t) return null;
+  for (const c of [...CATEGORIAS, ...propias]) {
     const cn = sinTildes(c.toLowerCase());
     if (cn === t || cn.replace(/s$/, '') === t.replace(/s$/, '')) return c;
   }
   return null;
+}
+
+/** "🍔 Comida" — con el emoji de la categoría (base o propia). */
+export function conEmoji(c: string, propias: readonly CategoriaPropia[] = []): string {
+  const e = EMOJI_BASE[c] ?? propias.find((p) => p.nombre === c)?.emoji;
+  return e ? `${e} ${c}` : c;
 }
 
 export function sinTildes(s: string): string {

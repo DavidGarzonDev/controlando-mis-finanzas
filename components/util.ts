@@ -1,6 +1,7 @@
 import {
   Bus, CircleEllipsis, Scale, HeartPulse, House, PartyPopper, ShoppingBag, UtensilsCrossed, Wifi, type LucideIcon,
 } from 'lucide-react';
+import { CATEGORIAS, EMOJI_BASE, type CategoriaPropia } from '@/lib/categorias';
 
 export const ZONA = 'America/Bogota';
 
@@ -55,3 +56,22 @@ export const ICONO_CAT: Record<string, LucideIcon> = {
   Comida: UtensilsCrossed, Transporte: Bus, Salidas: PartyPopper, Compras: ShoppingBag,
   Hogar: House, Servicios: Wifi, Salud: HeartPulse, Otros: CircleEllipsis, Ajuste: Scale,
 };
+
+// Categorías que creó el usuario: su emoji y su color (o uno de esta paleta, en orden).
+const PROPIAS = new Map<string, { emoji: string | null; color: string }>();
+const PALETA_PROPIAS = ['#0e9f9a', '#c2560c', '#8b5cf6', '#db2777', '#0284c7', '#65a30d', '#b45309', '#475569'];
+
+/** Se llama una vez al cargar la página con las categorías propias. */
+export function registrarCategorias(lista: CategoriaPropia[]) {
+  PROPIAS.clear();
+  lista.forEach((c, i) => PROPIAS.set(c.nombre, { emoji: c.emoji, color: c.color ?? PALETA_PROPIAS[i % PALETA_PROPIAS.length] }));
+}
+/** Agrega una categoría recién creada sin recargar la página. */
+export function agregarCategoriaLocal(c: CategoriaPropia) {
+  PROPIAS.set(c.nombre, { emoji: c.emoji, color: c.color ?? PALETA_PROPIAS[PROPIAS.size % PALETA_PROPIAS.length] });
+}
+export const colorCat = (c: string) => COLOR_CAT[c] ?? PROPIAS.get(c)?.color ?? 'var(--s-otros)';
+export const emojiCat = (c: string): string | null => EMOJI_BASE[c] ?? PROPIAS.get(c)?.emoji ?? null;
+export const esPropia = (c: string) => PROPIAS.has(c);
+/** Todas: las de siempre (Otros al final) y las tuyas. */
+export const todasCategorias = (): string[] => [...CATEGORIAS.filter((c) => c !== 'Otros'), ...PROPIAS.keys(), 'Otros'];

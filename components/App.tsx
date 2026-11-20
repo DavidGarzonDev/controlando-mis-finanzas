@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { flushSync } from 'react-dom';
 import {
   ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
-  ChartPie, ChartSpline, Lightbulb, ListChecks, LogOut, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
+  ChartPie, ChartSpline, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
 } from 'lucide-react';
-import { marcarFijo } from '@/app/actions';
+import { borrar, marcarFijo } from '@/app/actions';
+import { comercioDe } from '@/lib/comercios';
 import type { Consejo, Nivel } from '@/lib/consejos';
 import type {
   Cuenta, Deuda, Fijo, Gasto, Hormiga, Ingreso, Meta, MesHistorial, MovCredito, Pendiente, PuntoPatrimonio, Resumen as TResumen,
@@ -18,11 +19,15 @@ import { BarrasHistorial, Calendario, Chispa, CurvaMes, Dona } from './graficas'
 import { Creditos } from './Creditos';
 import { Plan } from './Plan';
 import { Contador, conTransicion } from './animacion';
-import { BotonTema } from './Tema';
+import { BotonPrivado, BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
 import { Paleta } from './Paleta';
+import { confeti } from './Celebrar';
+import { Historias } from './Historias';
 import { salir } from '@/app/entrar/acciones';
-import { COLOR_CAT, ICONO_CAT, claveDia, fechaCorta, hora, mesCortoDe, nombreMes, pesos } from './util';
+import { IconoCat } from './IconoCat';
+import type { CategoriaPropia } from '@/lib/categorias';
+import { claveDia, colorCat, registrarCategorias, fechaCorta, hora, mesCortoDe, nombreMes, pesos } from './util';
 
 type Props = {
   mes: string; meses: string[];
@@ -31,6 +36,7 @@ type Props = {
   movCredito: Record<number, MovCredito[]>; cuentas: Cuenta[];
   metas: Meta[]; transferencias: Transferencia[]; hormiga: Hormiga[]; suscripciones: Suscripcion[]; patrimonio: PuntoPatrimonio[];
   retos: Reto[];
+  categorias: CategoriaPropia[];
 };
 type Tab = 'resumen' | 'movimientos' | 'billetera' | 'plan';
 
@@ -42,10 +48,12 @@ const TABS: { id: Tab; label: string; Icono: typeof LayoutDashboard }[] = [
 ];
 
 export default function App(p: Props) {
+  registrarCategorias(p.categorias);
   const [tab, setTab] = useState<Tab>('resumen');
   const [editor, setEditor] = useState<Editor | null>(null);
   const [aviso, setAviso] = useState<{ texto: string; n: number } | null>(null);
   const [paleta, setPaleta] = useState(false);
+  const [historias, setHistorias] = useState(false);
   const tabsRef = useRef<HTMLDivElement>(null);
 
   // Ctrl+K (o ⌘K) abre la paleta rápida desde cualquier parte.
@@ -97,6 +105,27 @@ export default function App(p: Props) {
     ir(t.id);
     tabsRef.current?.querySelector<HTMLButtonElement>(`[data-tab="${t.id}"]`)?.focus();
   }
+
+  // Celebraciones: meta cumplida, todo lo del mes pagado o reto logrado (confeti + vibración).
+  const antes = useRef<{ metas: Map<number, boolean>; pendientes: number; retos: Map<number, string> } | null>(null);
+  useEffect(() => {
+    const ahora = {
+      metas: new Map(p.metas.map((m) => [m.id, m.objetivo > 0 && m.ahorrado >= m.objetivo])),
+      pendientes: p.resumen.esActual ? p.resumen.pendientes.length : -1,
+      retos: new Map(p.retos.map((r) => [r.id, r.estado as string])),
+    };
+    const a = antes.current;
+    antes.current = ahora;
+    if (!a) return;
+    const meta = p.metas.find((m) => ahora.metas.get(m.id) && a.metas.get(m.id) === false);
+    const reto = p.retos.find((r) => r.estado === 'logrado' && a.retos.get(r.id) && a.retos.get(r.id) !== 'logrado');
+    const alDia = a.pendientes > 0 && ahora.pendientes === 0;
+    const motivo = meta ? `¡Cumpliste tu meta ${meta.nombre}! 🎉` : reto ? `¡Lograste el reto ${reto.nombre}! 🏆` : alDia ? '¡Al día! Pagaste todo lo del mes 🎉' : null;
+    if (motivo) {
+      confeti();
+      avisar(motivo);
+    }
+  }, [p.metas, p.resumen, p.retos, avisar]);
 
   const hoyClave = `${p.hoy.anio}-${String(p.hoy.mes).padStart(2, '0')}-${String(p.hoy.dia).padStart(2, '0')}`;
 
@@ -159,6 +188,7 @@ export default function App(p: Props) {
           <button className="btn icono-tema solo-movil" aria-label="Buscar o registrar" onClick={() => setPaleta(true)}>
             <Search size={20} aria-hidden />
           </button>
+          <BotonPrivado avisar={avisar} />
           <BotonTema avisar={avisar} />
         </header>
 
@@ -170,7 +200,7 @@ export default function App(p: Props) {
         )}
 
         <main id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="panel" key={`${tab}-${p.mes}`}>
-          {tab === 'resumen' && <Resumen {...p} abrir={setEditor} ir={ir} avisar={avisar} />}
+          {tab === 'resumen' && <Resumen {...p} abrir={setEditor} ir={ir} avisar={avisar} verHistorias={() => setHistorias(true)} />}
           {tab === 'movimientos' && (
             <Movimientos gastos={p.gastos} ingresos={p.ingresos} transferencias={p.transferencias} cuentas={p.cuentas} r={p.resumen} mes={p.mes} hoyClave={hoyClave} abrir={setEditor} />
           )}
@@ -182,6 +212,9 @@ export default function App(p: Props) {
       </div>
 
       {editor && <Modal editor={editor} cuentas={p.cuentas} metas={p.metas} r={p.resumen} cerrar={() => setEditor(null)} avisar={avisar} />}
+      {historias && (
+        <Historias mes={p.mes} r={p.resumen} porDia={p.porDia} historial={p.historial} gastos={p.gastos} metas={p.metas} patrimonio={p.patrimonio} cerrar={() => setHistorias(false)} />
+      )}
       <Paleta abierta={paleta} cerrar={() => setPaleta(false)} ir={ir} abrir={setEditor} mes={p.mes} />
 
       <div className="aviso-zona" aria-live="polite">
@@ -198,8 +231,8 @@ export default function App(p: Props) {
 // ===========================================================================
 // Resumen
 
-function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes, metas, hormiga, suscripciones, patrimonio, abrir, ir, avisar }: Props & {
-  abrir: (e: Editor) => void; ir: (t: Tab) => void; avisar: (m: string) => void;
+function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes, metas, hormiga, suscripciones, patrimonio, abrir, ir, avisar, verHistorias }: Props & {
+  abrir: (e: Editor) => void; ir: (t: Tab) => void; avisar: (m: string) => void; verHistorias: () => void;
 }) {
   const presupuestoMes = Math.max(0, r.ingresos - r.cuotas - r.fijos - r.extraAbonos - r.ahorro);
   const limiteDiario = presupuestoMes / r.diasMes;
@@ -211,7 +244,7 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
       {r.esActual ? (
         <Bento r={r} porDia={porDia} historial={historial} patrimonio={patrimonio} limite={limiteRacha} abrir={abrir} ir={ir} />
       ) : (
-        <CierreMes r={r} />
+        <CierreMes r={r} verHistorias={verHistorias} />
       )}
     <div className="rejilla">
       <div className="col-principal">
@@ -219,6 +252,7 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
         <section className="bloque" aria-labelledby="t-mes">
           <div className="bloque-cab">
             <h2 id="t-mes">{r.esActual ? 'Cómo va el mes' : 'Cómo fue el mes'}</h2>
+            <button className="chip-historias" onClick={verHistorias}><Sparkles size={14} aria-hidden /> Tu mes en historias</button>
             <p className="sub">
               Gastado <b className="num">{pesos(r.variables)}</b>
               {presupuestoMes > 0 && <> de <b className="num">{pesos(presupuestoMes)}</b> para el día a día</>}
@@ -431,7 +465,7 @@ function Bento({ r, porDia, historial, patrimonio, limite, abrir, ir }: {
 }
 
 /** Resumen de un mes que ya pasó: cuánto entró, cuánto salió y con cuánto cerraste. */
-function CierreMes({ r }: { r: TResumen }) {
+function CierreMes({ r, verHistorias }: { r: TResumen; verHistorias: () => void }) {
   const salio = r.cuotas + r.fijos + r.variables + r.extraAbonos;
   return (
     <section className={`medidor ${r.disponible < 0 ? 'rojo' : ''}`} aria-labelledby="t-cierre">
@@ -442,6 +476,7 @@ function CierreMes({ r }: { r: TResumen }) {
         <div><dt>Salió</dt><dd className="num">{pesos(salio)}</dd></div>
         <div><dt>Ahorraste</dt><dd className="num">{pesos(r.ahorro)}</dd></div>
       </dl>
+      <button className="btn-historias" onClick={verHistorias}><Sparkles size={16} aria-hidden /> Ver tu mes en Pilas</button>
     </section>
   );
 }
@@ -521,7 +556,7 @@ function Proyeccion({ r }: { r: TResumen }) {
   const { finDeMes, ingresoEsperado } = r.proyeccion;
   return (
     <p className="proyeccion">
-      A este ritmo terminas el mes con <b className="num">{pesos(finDeMes)}</b>
+      A tu ritmo real (~<b className="num">{pesos(r.proyeccion.ritmo)}</b>/día) cierras el mes con <b className="num">{pesos(finDeMes)}</b>
       {ingresoEsperado > 0 && <> · <b className="num">{pesos(finDeMes + ingresoEsperado)}</b> si te entra lo de siempre</>}
     </p>
   );
@@ -530,18 +565,17 @@ function Proyeccion({ r }: { r: TResumen }) {
 function Categorias({ r }: { r: TResumen }) {
   if (!r.porCategoria.length) return <Vacio icono="cats">Aún no hay gastos este mes. Cada gasto se clasifica solo: comida, transporte, salidas…</Vacio>;
   const max = Math.max(...r.porCategoria.map((c) => c.total), ...r.porCategoriaMesAnterior.map((c) => c.total), ...Object.values(r.topes));
-  const partes = r.porCategoria.map((c) => ({ nombre: c.categoria, valor: c.total, color: COLOR_CAT[c.categoria] ?? 'var(--s-otros)' }));
+  const partes = r.porCategoria.map((c) => ({ nombre: c.categoria, valor: c.total, color: colorCat(c.categoria) }));
   return (
     <div className="cats-con-dona">
     <Dona partes={partes} total={r.porCategoria.reduce((s, c) => s + c.total, 0)} />
     <ul className="cats">
       {r.porCategoria.map((c) => {
-        const Icono = ICONO_CAT[c.categoria] ?? ICONO_CAT.Otros;
         const ant = r.porCategoriaMesAnterior.find((x) => x.categoria === c.categoria)?.total;
         const pct = Math.round((c.total / r.variables) * 100);
         return (
-          <li key={c.categoria} style={{ '--c': COLOR_CAT[c.categoria] ?? 'var(--s-otros)' } as React.CSSProperties}>
-            <span className="cat-ico"><Icono size={16} aria-hidden /></span>
+          <li key={c.categoria} style={{ '--c': colorCat(c.categoria) } as React.CSSProperties}>
+            <span className="cat-ico"><IconoCat c={c.categoria} /></span>
             <span className="cat-nombre">{c.categoria}<small>{pct} %</small></span>
             <span className="cat-pista" aria-hidden>
               <span className="cat-barra" style={{ width: `${(c.total / max) * 100}%` }} />
@@ -705,7 +739,7 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
           <div className="chips" aria-label="Filtrar por categoría">
             {cats.map((c) => (
               <button key={c} className={cat === c ? 'chip on' : 'chip'} aria-pressed={cat === c} onClick={() => setCat(cat === c ? null : c)}
-                style={{ '--c': COLOR_CAT[c] ?? 'var(--s-otros)' } as React.CSSProperties}>
+                style={{ '--c': colorCat(c) } as React.CSSProperties}>
                 <i className="punto-cat" aria-hidden /> {c}
               </button>
             ))}
@@ -776,12 +810,80 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
   );
 }
 
+/**
+ * Un gasto. En el celular se desliza: a la derecha lo editas, a la izquierda aparece "Borrar".
+ * Si el concepto nombra un comercio conocido (Rappi, D1, Netflix…), se ve su logo.
+ */
 function FilaGasto({ g, sub, abrir }: { g: Gasto; sub: string; abrir: (e: Editor) => void }) {
-  const Icono = ICONO_CAT[g.categoria] ?? ICONO_CAT.Otros;
+  const [dx, setDx] = useState(0);
+  const [abierta, setAbierta] = useState(false);
+  const [borrando, iniciar] = useTransition();
+  const [sinLogo, setSinLogo] = useState(false);
+  const inicio = useRef<{ x: number; y: number; base: number; modo: 'nada' | 'h' | 'v' } | null>(null);
+  const movio = useRef(false);
+  const comercio = useMemo(() => comercioDe(g.concepto), [g.concepto]);
+
+  function abajo(e: React.PointerEvent) {
+    if (e.pointerType !== 'touch') return;
+    inicio.current = { x: e.clientX, y: e.clientY, base: abierta ? -92 : 0, modo: 'nada' };
+    movio.current = false;
+  }
+  function mover(e: React.PointerEvent) {
+    const i = inicio.current;
+    if (!i) return;
+    const mx = e.clientX - i.x;
+    const my = e.clientY - i.y;
+    if (i.modo === 'nada' && Math.hypot(mx, my) > 8) i.modo = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
+    if (i.modo !== 'h') return;
+    movio.current = true;
+    setDx(Math.max(-130, Math.min(130, i.base + mx)));
+  }
+  function arriba() {
+    const i = inicio.current;
+    inicio.current = null;
+    if (!i || i.modo !== 'h') return;
+    if (dx > 90) {
+      navigator.vibrate?.(10);
+      setDx(0);
+      setAbierta(false);
+      abrir({ tipo: 'gasto', item: g });
+    } else if (dx < -50) {
+      setDx(-92);
+      setAbierta(true);
+    } else {
+      setDx(0);
+      setAbierta(false);
+    }
+  }
+
   return (
-    <li>
-      <button className="fila" onClick={() => abrir({ tipo: 'gasto', item: g })} style={{ '--c': COLOR_CAT[g.categoria] ?? 'var(--s-otros)' } as React.CSSProperties}>
-        <span className="fila-ico" aria-hidden><Icono size={16} /></span>
+    <li className={`desliza ${borrando ? 'saliendo' : ''}`} data-lado={dx > 0 ? 'der' : dx < 0 ? 'izq' : undefined} style={{ '--dx': `${dx}px` } as React.CSSProperties}>
+      <span className="desliza-editar" aria-hidden><Pencil size={18} /> Editar</span>
+      <button className="desliza-borrar" tabIndex={abierta ? 0 : -1} aria-hidden={!abierta}
+        onClick={() => iniciar(async () => { await borrar('gasto', g.id); })}>
+        <Trash2 size={18} aria-hidden /> Borrar
+      </button>
+      <button
+        className="fila"
+        style={{ '--c': colorCat(g.categoria) } as React.CSSProperties}
+        onPointerDown={abajo}
+        onPointerMove={mover}
+        onPointerUp={arriba}
+        onPointerCancel={arriba}
+        onClick={(e) => {
+          if (movio.current) { e.preventDefault(); movio.current = false; return; }
+          if (abierta) { setDx(0); setAbierta(false); return; }
+          abrir({ tipo: 'gasto', item: g });
+        }}
+      >
+        <span className={`fila-ico ${comercio && !sinLogo ? 'con-logo' : ''}`} aria-hidden>
+          {comercio && !sinLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={comercio.logo} alt="" width={22} height={22} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setSinLogo(true)} />
+          ) : (
+            <IconoCat c={g.categoria} />
+          )}
+        </span>
         <span className="fila-txt">
           <span className="fila-nombre">{g.concepto}</span>
           <span className="fila-sub">{sub}</span>

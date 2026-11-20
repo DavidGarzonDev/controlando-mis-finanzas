@@ -20,6 +20,53 @@ export async function enviarMensaje(chatId: number | string, texto: string, boto
   return Boolean(await api('sendMessage', { chat_id: chatId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: teclado(botones) }));
 }
 
+/** Manda una imagen (PNG) con un texto debajo (máx. 1024 caracteres). */
+export async function enviarFoto(chatId: number | string, png: ArrayBuffer, texto: string): Promise<boolean> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('Falta TELEGRAM_BOT_TOKEN');
+  const fd = new FormData();
+  fd.set('chat_id', String(chatId));
+  fd.set('caption', texto.slice(0, 1024));
+  fd.set('parse_mode', 'HTML');
+  fd.set('photo', new Blob([png], { type: 'image/png' }), 'semana.png');
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: fd });
+  if (!res.ok) console.error('Telegram sendPhoto falló', res.status, await res.text());
+  return res.ok;
+}
+
+/** Menú fijo abajo del chat (botones de texto, sin emojis). Al tocarlos, Telegram manda ese texto. */
+export const MENU = [['Hoy', 'Resumen', 'Por pagar'], ['Metas', 'Tarjetas', 'Deshacer']];
+
+/** Manda un mensaje y deja el menú fijo abajo del chat. */
+export async function enviarConMenu(chatId: number | string, texto: string): Promise<boolean> {
+  return Boolean(await api('sendMessage', {
+    chat_id: chatId, text: texto, parse_mode: 'HTML', disable_web_page_preview: true,
+    reply_markup: { keyboard: MENU.map((f) => f.map((text) => ({ text }))), resize_keyboard: true, is_persistent: true, input_field_placeholder: 'Ej: almuerzo 15 mil con nequi' },
+  }));
+}
+
+let comandosListos = false;
+/** La lista de comandos que sale al escribir "/" en Telegram (se registra una vez por arranque). */
+export async function asegurarComandos() {
+  if (comandosListos || !process.env.TELEGRAM_BOT_TOKEN) return;
+  comandosListos = true;
+  await api('setMyCommands', {
+    commands: [
+      { command: 'hoy', description: 'Cuánto puedes gastar hoy' },
+      { command: 'resumen', description: 'Cómo vas este mes' },
+      { command: 'pendientes', description: 'Lo que te falta pagar' },
+      { command: 'metas', description: 'Tus metas de ahorro' },
+      { command: 'tarjetas', description: 'Cupo de tus tarjetas' },
+      { command: 'deshacer', description: 'Borra el último movimiento' },
+      { command: 'categorias', description: 'Ver y crear categorías' },
+      { command: 'consejos', description: 'Recomendaciones con tus números' },
+      { command: 'retos', description: 'Tus retos y rachas' },
+      { command: 'menu', description: 'Mostrar el menú de botones' },
+      { command: 'ayuda', description: 'Todo lo que puedo hacer' },
+    ],
+  }).catch(() => (comandosListos = false));
+}
+
 /** Cambia el texto de un mensaje ya enviado (y quita sus botones). */
 export async function editarMensaje(chatId: number | string, mensajeId: number, texto: string, botones?: Boton[][]) {
   await api('editMessageText', {
