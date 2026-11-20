@@ -80,8 +80,14 @@ Si menciona varios gastos o ingresos, sepáralos con " ; " (ej. "almuerzo 15 mil
 Escribe los montos como los dijo ("15 mil", "1.200.000").`;
 
 const PROMPT_IMAGEN = `Es la foto de un recibo, factura, voucher o pantallazo de pago en Colombia.
-Responde SOLO una línea con: <qué fue, 1 a 4 palabras> <valor total en pesos, solo dígitos>.
-Ejemplos: "Mercado D1 85400", "Gasolina Terpel 60000", "Almuerzo restaurante 23500".
+Responde SOLO una línea con: <qué se compró, 1 a 3 palabras> <valor total en pesos, solo dígitos>.
+Mira los productos de la factura y resume QUÉ son, como lo diría un colombiano:
+- paquetes, papas, dulces, chocolatinas, galletas, gaseosas → "Mecato"
+- comida para la casa (arroz, carne, verduras, leche, huevos) → "Mercado"
+- jabón, detergente, papel higiénico, cloro → "Aseo"
+- medicamentos → "Droguería"; gasolina → "Gasolina"; comida servida → "Almuerzo" o "Comida restaurante"
+Nunca respondas algo genérico como "Compra productos" o "Compra varios".
+Ejemplos: "Mecato 10650", "Mercado D1 85400", "Gasolina Terpel 60000", "Aseo 23400".
 Si es una transferencia o pago recibido, empieza con "me pagaron". Si no se ve un valor, responde "no se ve el valor".`;
 
 export type ResultadoMedio = { ok: true; texto: string } | { ok: false; motivo: 'sin_clave' | 'limite' | 'error' };

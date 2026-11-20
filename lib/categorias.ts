@@ -43,6 +43,9 @@ export const PALABRAS_BASE: Record<string, Categoria> = {
   pan: 'Comida', panaderia: 'Comida', cafe: 'Comida', tinto: 'Comida', gaseosa: 'Comida',
   pizza: 'Comida', hamburguesa: 'Comida', perro: 'Comida', pollo: 'Comida', frutas: 'Comida',
   fruta: 'Comida', tienda: 'Comida', d1: 'Comida', ara: 'Comida', exito: 'Comida', rappi: 'Comida',
+  // Mecato y chucherías
+  chucherias: 'Comida', chucheria: 'Comida', golosinas: 'Comida', golosina: 'Comida', dulces: 'Comida',
+  paquetes: 'Comida', paquete: 'Comida', snacks: 'Comida',
   // Bebidas y snacks
   gatorade: 'Comida', powerade: 'Comida', cocacola: 'Comida', coca: 'Comida', pony: 'Comida', malta: 'Comida',
   postobon: 'Comida', redbull: 'Comida', monster: 'Comida', energizante: 'Comida', bebida: 'Comida', refresco: 'Comida',
