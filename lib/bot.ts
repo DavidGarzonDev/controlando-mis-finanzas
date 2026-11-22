@@ -53,6 +53,7 @@ Y lo que te entra, venga de donde venga:
 /hormiga — gastos pequeños que se acumulan
 También puedes mandarme una <b>nota de voz</b> o la <b>foto de un recibo</b>.
 /saldo nequi 250000 — actualiza el saldo de una cuenta (sin monto: ver saldos)
+/cuenta efectivo — qué movió el saldo de esa cuenta, paso a paso
 /pague gimnasio — marca un gasto fijo o una cuota como pagada
 <code>ya pagué la cuota de la nu</code> — si la pagaste en el banco y el saldo ya está al día: solo la marca
 /ajuste -20000 — cuadra plata que no sabes en qué se fue (o +20000 si te sobra)
@@ -99,6 +100,10 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
   const args = resto.join(' ');
   const cmd = comando.toLowerCase().replace(/@\w+$/, ''); // quita @nombre_bot en grupos
 
+  // "movimientos del efectivo", "historial de nequi", "qué pasó con el efectivo"
+  const pideHistorial = texto.match(/^(?:movimientos|historial|qu[eé] pas[oó] con)\s+(?:de\s+|del\s+|con\s+)?(?:la\s+|el\s+|mi\s+)?(.+)$/i);
+  if (pideHistorial && !extraerMonto(texto)) return historialCuenta(pideHistorial[1]);
+
   // Los botones del menú fijo llegan como texto ("Hoy", "Por pagar"…)
   const delMenu: Record<string, string> = { hoy: '/hoy', resumen: '/resumen', 'por pagar': '/pendientes', metas: '/metas', tarjetas: '/tarjetas', deshacer: '/deshacer', menu: '/menu', 'menú': '/menu' };
   const atajo = delMenu[texto.toLowerCase()];
@@ -134,6 +139,9 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
     case '/saldo':
     case '/cuentas':
       return saldoCuenta(args);
+    case '/cuenta':
+    case '/historial':
+      return historialCuenta(args);
     case '/compra':
       return compraConTarjeta(args);
     case '/ajuste':
@@ -708,6 +716,32 @@ async function saldoCuenta(args: string): Promise<string> {
   if (!c) return `No encontré esa cuenta. Tienes: ${cs.map((x) => esc(x.nombre)).join(', ') || 'ninguna'}. Ej: <code>/saldo nequi 250000</code>`;
   await db.actualizarSaldoCuenta(c.id, m.monto);
   return `🏦 Saldo de <b>${esc(c.nombre)}</b>: ${pesos(m.monto)}`;
+}
+
+/** /cuenta efectivo — lo que movió el saldo de una cuenta, con el saldo después de cada cosa. */
+async function historialCuenta(args: string): Promise<string> {
+  const cs = await db.cuentas();
+  if (!cs.length) return 'No tienes cuentas registradas. Agrégalas en el dashboard, pestaña Billetera.';
+  const c = cuentaDelTexto(args || '', cs)?.c ?? (/efectivo|billetera|cash/i.test(args) ? cs.find((x) => x.banco === 'efectivo') : undefined);
+  if (!c) return `¿De qué cuenta? Ej: <code>/cuenta efectivo</code>. Tienes: ${cs.map((x) => esc(x.nombre)).join(', ')}.`;
+  const { movs } = await db.movimientosCuenta(c.id, 15);
+  const f = (d: string) => new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  const lineas = movs.map((m) =>
+    m.tipo === 'ajuste'
+      ? `✏️ ${f(m.fecha)} · <b>Pusiste el saldo</b> de ${pesos(m.antes ?? 0)} a <b>${pesos(m.saldoDespues ?? 0)}</b>`
+      : `${(m.saldoDespues ?? 0) < 0 ? '🔴' : '▫️'} ${f(m.fecha)} · ${esc(m.concepto)} <b>${m.delta > 0 ? '+' : '−'}${pesos(Math.abs(m.delta))}</b>${m.saldoDespues === null ? '' : ` → ${pesos(m.saldoDespues)}`}`,
+  );
+  // El movimiento con el que empezó la racha en negativo (de lo más nuevo hacia atrás)
+  let negativo: db.MovCuenta | undefined;
+  for (const m of movs) {
+    if (m.saldoDespues !== null && m.saldoDespues < 0) negativo = m;
+    else break;
+  }
+  const pista = c.saldo < 0
+    ? `\n\n<i>Quedó en negativo desde «${esc(negativo?.concepto ?? '')}». Si esos gastos ya los habías hecho antes de poner el saldo, se descontaron dos veces: corrige con <code>/saldo ${esc(c.nombre.toLowerCase())} [lo que tienes ahora]</code>.</i>`
+    : '';
+  const viejo = movs.some((m) => m.saldoDespues === null) ? '\n<i>En los movimientos sin "→" no sé cuánto quedó: antes no se guardaban los cambios de saldo a mano.</i>' : '';
+  return `<b>${esc(c.nombre)}</b> · saldo <b>${pesos(c.saldo)}</b>\nLo que movió el saldo (lo más nuevo arriba):\n\n${lineas.join('\n') || 'Sin movimientos todavía.'}${viejo}${pista}`;
 }
 
 // ---------------------------------------------------------------------------

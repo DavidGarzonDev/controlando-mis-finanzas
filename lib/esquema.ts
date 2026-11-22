@@ -104,6 +104,12 @@ const SENTENCIAS = [
   `ALTER TABLE ingresos ADD COLUMN IF NOT EXISTS duda_monto INTEGER`,
   // Resumen semanal de los domingos (uno por semana)
   `CREATE TABLE IF NOT EXISTS resumenes_semanales (semana DATE PRIMARY KEY, enviado TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  // Cuando cambias el saldo de una cuenta a mano (para ver la historia completa del saldo)
+  `CREATE TABLE IF NOT EXISTS ajustes_saldo (
+    id SERIAL PRIMARY KEY, cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+    fecha TIMESTAMPTZ NOT NULL DEFAULT now(), antes INTEGER NOT NULL, despues INTEGER NOT NULL)`,
+  // Desde cuándo se anotan los cambios de saldo a mano (antes de eso el saldo histórico no se puede reconstruir)
+  `INSERT INTO migraciones (id) VALUES ('registro_ajustes') ON CONFLICT DO NOTHING`,
   // Categorías que crea el usuario, con su emoji y color
   `CREATE TABLE IF NOT EXISTS categorias_propias (
     nombre TEXT PRIMARY KEY, emoji TEXT, color TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now())`,

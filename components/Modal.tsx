@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Banknote, X } from 'lucide-react';
 import {
   aportarMeta, borrar, marcarCuota, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, guardarMeta, guardarTopes,
-  registrarAbono, registrarCompra, transferir,
+  movimientosDeCuenta, registrarAbono, registrarCompra, transferir,
 } from '@/app/actions';
 import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
 import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, Meta, Resumen, TipoCredito, Transferencia } from '@/lib/datos';
@@ -312,6 +312,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
               </span>
             </label>
             <p className="nota">El saldo lo actualizas tú cuando quieras (o desde Telegram: <code>/saldo nequi 250000</code>).</p>
+            {item?.id ? <HistorialCuenta id={item.id} /> : null}
           </>
         )}
 
@@ -658,5 +659,58 @@ function Monto({ name, defaultValue, autoFocus, opcional }: { name: string; defa
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Historial de la cuenta: cada cosa que movió el saldo y cómo quedó después.
+ * Sirve para entender por qué una cuenta (por ejemplo el efectivo) quedó en negativo.
+ */
+function HistorialCuenta({ id }: { id: number }) {
+  const [datos, setDatos] = useState<Awaited<ReturnType<typeof movimientosDeCuenta>> | null>(null);
+  const [abierto, setAbierto] = useState(false);
+  useEffect(() => {
+    if (!abierto || datos) return;
+    movimientosDeCuenta(id).then(setDatos).catch(() => setDatos({ cuenta: null, movs: [] }));
+  }, [abierto, datos, id]);
+  const f = (d: string) => new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+  // Dónde empezó a estar en negativo (de lo más nuevo hacia atrás)
+  let inicioNegativo = -1;
+  if (datos) for (let i = 0; i < datos.movs.length && (datos.movs[i].saldoDespues ?? 0) < 0; i++) inicioNegativo = i;
+  return (
+    <details className="historial-cuenta" onToggle={(e) => setAbierto((e.target as HTMLDetailsElement).open)}>
+      <summary>Ver qué movió el saldo</summary>
+      {!datos ? (
+        <p className="nota">Cargando…</p>
+      ) : !datos.movs.length ? (
+        <p className="nota">Esta cuenta todavía no tiene movimientos.</p>
+      ) : (
+        <>
+          {inicioNegativo >= 0 && (
+            <p className="historial-alerta">
+              Quedó en negativo desde <b>{datos.movs[inicioNegativo].concepto}</b>. Si esos gastos ya los habías hecho antes de poner
+              el saldo, se descontaron dos veces: corrige el <b>Saldo actual</b> arriba con lo que tienes ahora.
+            </p>
+          )}
+          <ol className="historial-lista">
+            {datos.movs.map((m, i) => (
+              <li key={i} className={`${m.tipo === 'ajuste' ? 'ajuste' : ''} ${(m.saldoDespues ?? 0) < 0 ? 'neg' : ''} ${i === inicioNegativo ? 'quiebre' : ''}`}>
+                <span className="historial-txt">
+                  <b>{m.tipo === 'ajuste' ? 'Pusiste el saldo a mano' : m.concepto}</b>
+                  <small>{f(m.fecha)}{m.tipo === 'ajuste' ? ` · antes ${pesos(m.antes ?? 0)}` : ''}</small>
+                </span>
+                <span className="historial-cifras">
+                  {m.tipo !== 'ajuste' && <b className={`num ${m.delta > 0 ? 'pos' : ''}`}>{m.delta > 0 ? '+' : '−'}{pesos(Math.abs(m.delta))}</b>}
+                  {m.saldoDespues !== null && <small className="num">queda {pesos(m.saldoDespues)}</small>}
+                </span>
+              </li>
+            ))}
+          </ol>
+          {datos.movs.some((m) => m.saldoDespues === null) && (
+            <p className="nota">En los movimientos sin “queda” no se puede saber el saldo: antes no se guardaban los cambios de saldo a mano.</p>
+          )}
+        </>
+      )}
+    </details>
   );
 }

@@ -466,15 +466,66 @@ export async function guardarCuenta(
   if (c.principal) await sql()`UPDATE cuentas SET principal = false WHERE principal AND id IS DISTINCT FROM ${id}`;
   if (id) {
     if (c.principal !== undefined) await sql()`UPDATE cuentas SET principal = ${c.principal} WHERE id = ${id}`;
+    await anotarAjuste(id, c.saldo);
     await sql()`
       UPDATE cuentas SET nombre = ${c.nombre}, banco = ${c.banco}, saldo = ${c.saldo}, ultimos4 = ${c.ultimos4},
         franquicia = ${c.franquicia}, color = ${c.color}, actualizado = now()
       WHERE id = ${id}`;
   } else {
-    await sql()`
+    const [nueva] = await sql()`
       INSERT INTO cuentas (nombre, banco, saldo, ultimos4, franquicia, color, principal)
-      VALUES (${c.nombre}, ${c.banco}, ${c.saldo}, ${c.ultimos4}, ${c.franquicia}, ${c.color}, ${c.principal ?? false})`;
+      VALUES (${c.nombre}, ${c.banco}, ${c.saldo}, ${c.ultimos4}, ${c.franquicia}, ${c.color}, ${c.principal ?? false})
+      RETURNING id`;
+    await sql()`INSERT INTO ajustes_saldo (cuenta_id, antes, despues) VALUES (${n(nueva.id)}, 0, ${c.saldo})`;
   }
+}
+
+/** Si el saldo nuevo es distinto al que había, deja constancia (antes → después). */
+async function anotarAjuste(id: number, saldoNuevo: number) {
+  const [c] = await sql()`SELECT saldo FROM cuentas WHERE id = ${id}`;
+  if (c && n(c.saldo) !== saldoNuevo) await sql()`INSERT INTO ajustes_saldo (cuenta_id, antes, despues) VALUES (${id}, ${n(c.saldo)}, ${saldoNuevo})`;
+}
+
+export type MovCuenta = {
+  fecha: string; tipo: 'gasto' | 'ingreso' | 'sale' | 'entra' | 'pago' | 'ajuste';
+  /** null: es de antes de que se anotaran los cambios de saldo a mano, así que no se sabe cuánto quedó. */
+  concepto: string; delta: number; saldoDespues: number | null; antes?: number;
+};
+
+/**
+ * Todo lo que movió el saldo de una cuenta (lo más nuevo primero), con el saldo que quedó después de cada cosa.
+ * Se calcula hacia atrás desde el saldo actual; los cambios de saldo a mano aparecen como "ajuste".
+ */
+export async function movimientosCuenta(id: number, limite = 40): Promise<{ cuenta: Cuenta | null; movs: MovCuenta[] }> {
+  const cuenta = (await cuentas()).find((c) => c.id === id) ?? null;
+  if (!cuenta) return { cuenta: null, movs: [] };
+  const rows = await sql().query(
+    `SELECT * FROM (
+       SELECT fecha, 'gasto' AS tipo, concepto, -monto AS delta, NULL::int AS antes, NULL::int AS despues FROM gastos WHERE cuenta_id = $1
+       UNION ALL SELECT fecha, 'ingreso', concepto, monto, NULL, NULL FROM ingresos WHERE cuenta_id = $1
+       UNION ALL SELECT t.fecha, 'sale', COALESCE(t.nota, 'Pasaste a ' || COALESCE(c.nombre, 'otra cuenta')), -t.monto, NULL, NULL
+         FROM transferencias t LEFT JOIN cuentas c ON c.id = t.hacia_id WHERE t.desde_id = $1
+       UNION ALL SELECT t.fecha, 'entra', COALESCE(t.nota, 'Llegó de ' || COALESCE(c.nombre, 'otra cuenta')), t.monto, NULL, NULL
+         FROM transferencias t LEFT JOIN cuentas c ON c.id = t.desde_id WHERE t.hacia_id = $1
+       UNION ALL SELECT a.fecha, 'pago', 'Pago a ' || d.nombre, -a.monto, NULL, NULL
+         FROM abonos a JOIN deudas d ON d.id = a.deuda_id WHERE a.cuenta_id = $1
+       UNION ALL SELECT fecha, 'ajuste', 'Pusiste el saldo a mano', despues - antes, antes, despues FROM ajustes_saldo WHERE cuenta_id = $1
+     ) m ORDER BY fecha DESC LIMIT $2`,
+    [id, limite],
+  );
+  const [desde] = await sql()`SELECT fecha FROM migraciones WHERE id = 'registro_ajustes'`;
+  const inicioRegistro = desde ? new Date(String(desde.fecha)).getTime() : 0;
+  let saldo = cuenta.saldo;
+  const movs: MovCuenta[] = rows.map((r) => {
+    const conocido = new Date(String(r.fecha)).getTime() >= inicioRegistro;
+    const m: MovCuenta = {
+      fecha: String(r.fecha), tipo: r.tipo as MovCuenta['tipo'], concepto: String(r.concepto), delta: n(r.delta),
+      saldoDespues: r.tipo === 'ajuste' ? n(r.despues) : conocido ? saldo : null, antes: r.tipo === 'ajuste' ? n(r.antes) : undefined,
+    };
+    saldo = r.tipo === 'ajuste' ? n(r.antes) : saldo - n(r.delta);
+    return m;
+  });
+  return { cuenta, movs };
 }
 /** La cuenta de efectivo; si no existe, la crea en $0. */
 export async function cuentaEfectivo(): Promise<Cuenta> {
@@ -485,6 +536,7 @@ export async function cuentaEfectivo(): Promise<Cuenta> {
 }
 
 export async function actualizarSaldoCuenta(id: number, saldo: number) {
+  await anotarAjuste(id, saldo);
   await sql()`UPDATE cuentas SET saldo = ${saldo}, actualizado = now() WHERE id = ${id}`;
 }
 export async function borrarCuenta(id: number) {

@@ -212,6 +212,12 @@ export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cue
   refrescar();
 }
 
+/** Lo que movió el saldo de una cuenta (para entender por qué quedó en lo que quedó). */
+export async function movimientosDeCuenta(id: number) {
+  await listo();
+  return db.movimientosCuenta(Number(id), 40);
+}
+
 /** Crea una categoría propia (nombre + emoji) desde la web. */
 export async function crearCategoriaAccion(nombre: string, emoji: string | null) {
   await listo();

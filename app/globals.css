@@ -2644,3 +2644,20 @@ html[data-privado] :is(.num, .ficha-cifra, .medidor-cifra):hover { filter: blur(
 /* Nada se sale de lado: así el celular nunca se aleja (zoom) ni corre la barra de abajo */
 html, body { overflow-x: clip; }
 .resumen-linea > div { min-width: 0; }
+
+/* Historial de una cuenta (en su ventana de edición) */
+.historial-cuenta { border-top: 1px solid var(--linea); padding-top: 12px; }
+.historial-cuenta summary { cursor: pointer; font-weight: 700; color: var(--azul); list-style: none; display: flex; align-items: center; gap: 6px; }
+.historial-cuenta summary::before { content: '›'; display: inline-block; transition: transform 0.2s; font-size: 1.2em; }
+.historial-cuenta[open] summary::before { transform: rotate(90deg); }
+.historial-alerta { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--rojo-suave); color: var(--tinta); font-size: 0.88rem; }
+.historial-lista { list-style: none; margin: 10px 0 6px; padding: 0; max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+.historial-lista li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 2px; border-top: 1px solid var(--linea); }
+.historial-lista li:first-child { border-top: 0; }
+.historial-txt, .historial-cifras { display: grid; gap: 1px; min-width: 0; }
+.historial-txt b { font-weight: 650; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.historial-cifras { text-align: right; flex: none; }
+.historial-lista small { color: var(--tinta-3); font-size: 0.76rem; }
+.historial-lista li.neg .historial-cifras small { color: var(--rojo); font-weight: 650; }
+.historial-lista li.ajuste { background: var(--azul-suave); border-radius: 10px; padding-inline: 8px; }
+.historial-lista li.quiebre { box-shadow: inset 3px 0 0 var(--rojo); padding-left: 10px; }
