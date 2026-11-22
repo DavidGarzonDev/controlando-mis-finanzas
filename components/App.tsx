@@ -799,6 +799,7 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
                     const cta = nombreCuenta(f.g.cuentaId);
                     return (
                       <FilaGasto key={`g${f.g.id}`} g={f.g} abrir={abrir}
+                        sinCuenta={!cta && cuentas.length > 0}
                         sub={`${f.g.categoria} · ${hora(f.g.fecha)}${cta ? ` · ${cta}` : ''}${f.g.origen === 'telegram' ? ' · Telegram' : ''}`} />
                     );
                   }
@@ -810,7 +811,7 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
                           <span className="fila-ico ingreso" aria-hidden><Plus size={16} /></span>
                           <span className="fila-txt">
                             <span className="fila-nombre">{f.i.concepto}</span>
-                            <span className="fila-sub">Ingreso · {hora(f.i.fecha)}{cta ? ` · a ${cta}` : ''}</span>
+                            <span className="fila-sub">Ingreso · {hora(f.i.fecha)}{cta ? ` · a ${cta}` : ''}{!cta && cuentas.length > 0 && <span className="sin-cuenta">Sin cuenta</span>}</span>
                           </span>
                           <span className="puntos" aria-hidden />
                           <span className="fila-monto num pos">+{pesos(f.i.monto)}</span>
@@ -851,7 +852,7 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
  * Un gasto. En el celular se desliza: a la derecha lo editas, a la izquierda aparece "Borrar".
  * Si el concepto nombra un comercio conocido (Rappi, D1, Netflix…), se ve su logo.
  */
-function FilaGasto({ g, sub, abrir }: { g: Gasto; sub: string; abrir: (e: Editor) => void }) {
+function FilaGasto({ g, sub, abrir, sinCuenta }: { g: Gasto; sub: string; abrir: (e: Editor) => void; sinCuenta?: boolean }) {
   const [dx, setDx] = useState(0);
   const [abierta, setAbierta] = useState(false);
   const [borrando, iniciar] = useTransition();
@@ -923,7 +924,7 @@ function FilaGasto({ g, sub, abrir }: { g: Gasto; sub: string; abrir: (e: Editor
         </span>
         <span className="fila-txt">
           <span className="fila-nombre">{g.concepto}</span>
-          <span className="fila-sub">{sub}</span>
+          <span className="fila-sub">{sub}{sinCuenta && <span className="sin-cuenta">Sin cuenta</span>}</span>
         </span>
         <span className="puntos" aria-hidden />
         <span className="fila-monto num">−{pesos(g.monto)}</span>

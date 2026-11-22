@@ -99,6 +99,10 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
       setError('Escribe el monto con el teclado.');
       return;
     }
+    if (editor.tipo === 'nuevo' && (tipo === 'gasto' || tipo === 'ingreso') && cuentas.length > 0 && !fd.get('cuenta')) {
+      setError(tipo === 'gasto' ? 'Elige con qué pagaste (para descontarlo de esa cuenta).' : 'Elige a dónde entró la plata (para sumarla a esa cuenta).');
+      return;
+    }
     try {
       await accion(fd);
       avisar(mensaje);
@@ -162,7 +166,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           <RegistroRapido
             key={modo}
             modo={modo}
-            cuenta={<SelectorCuenta cuentas={cuentas} etiqueta={modo === 'gasto' ? '¿Con qué pagaste?' : '¿A dónde entró?'} defecto={cuentas.find((c) => c.principal)?.id ?? null} />}
+            cuenta={<SelectorCuenta cuentas={cuentas} etiqueta={modo === 'gasto' ? '¿Con qué pagaste?' : '¿A dónde entró?'} defecto={cuentas.find((c) => c.principal)?.id ?? null} obligatorio />}
           />
         )}
 
@@ -462,16 +466,23 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
 }
 
 /** Elige de qué cuenta sale o a cuál entra la plata. "Efectivo" se crea solo si no existe. */
-function SelectorCuenta({ cuentas, etiqueta, defecto }: { cuentas: Cuenta[]; etiqueta: string; defecto: number | null }) {
+/**
+ * Elegir la cuenta. Con `obligatorio` (registros nuevos) no existe "Sin especificar" si ya tienes cuentas:
+ * así no queda plata sin cuenta (un ingreso sin cuenta no le suma a ningún saldo).
+ */
+function SelectorCuenta({ cuentas, etiqueta, defecto, obligatorio }: { cuentas: Cuenta[]; etiqueta: string; defecto: number | null; obligatorio?: boolean }) {
   const tieneEfectivo = cuentas.some((c) => c.banco === 'efectivo');
   const [valor, setValor] = useState<string>(defecto ? String(defecto) : '');
+  const sinVacia = obligatorio && cuentas.length > 0;
   return (
-    <fieldset className="cuentas-sel">
-      <legend>{etiqueta}</legend>
+    <fieldset className={`cuentas-sel ${sinVacia && !valor ? 'falta' : ''}`}>
+      <legend>{etiqueta}{sinVacia && !valor && <small> · elige una</small>}</legend>
       <input type="hidden" name="cuenta" value={valor} />
-      <button type="button" className={valor === '' ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === ''} onClick={() => setValor('')}>
-        Sin especificar
-      </button>
+      {!sinVacia && (
+        <button type="button" className={valor === '' ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === ''} onClick={() => setValor('')}>
+          Sin especificar
+        </button>
+      )}
       {cuentas.map((c) => (
         <button type="button" key={c.id} className={valor === String(c.id) ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === String(c.id)} onClick={() => setValor(String(c.id))}>
           <SelloBanco b={bancoPorId(c.banco)} chico /> {c.nombre}

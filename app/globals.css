@@ -2677,3 +2677,17 @@ html, body { overflow-x: clip; }
   cursor: pointer;
 }
 .monto-signo[aria-pressed='true'] { background: var(--rojo-suave); color: var(--rojo); border-color: transparent; }
+
+/* Movimiento sin cuenta: no le suma ni le resta a ningún saldo */
+.sin-cuenta {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ambar-suave);
+  color: var(--ambar);
+  font-size: 0.7rem;
+  font-weight: 750;
+  vertical-align: 1px;
+}
+.cuentas-sel.falta legend small { color: var(--ambar); font-weight: 700; }
