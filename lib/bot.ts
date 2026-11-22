@@ -724,7 +724,7 @@ async function historialCuenta(args: string): Promise<string> {
   if (!cs.length) return 'No tienes cuentas registradas. Agrégalas en el dashboard, pestaña Billetera.';
   const c = cuentaDelTexto(args || '', cs)?.c ?? (/efectivo|billetera|cash/i.test(args) ? cs.find((x) => x.banco === 'efectivo') : undefined);
   if (!c) return `¿De qué cuenta? Ej: <code>/cuenta efectivo</code>. Tienes: ${cs.map((x) => esc(x.nombre)).join(', ')}.`;
-  const { movs } = await db.movimientosCuenta(c.id, 15);
+  const { movs, saldoAntes, entradas, salidas, completo } = await db.movimientosCuenta(c.id, 15);
   const f = (d: string) => new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   const lineas = movs.map((m) =>
     m.tipo === 'ajuste'
@@ -741,7 +741,11 @@ async function historialCuenta(args: string): Promise<string> {
     ? `\n\n<i>Quedó en negativo desde «${esc(negativo?.concepto ?? '')}». Si esos gastos ya los habías hecho antes de poner el saldo, se descontaron dos veces: corrige con <code>/saldo ${esc(c.nombre.toLowerCase())} [lo que tienes ahora]</code>.</i>`
     : '';
   const viejo = movs.some((m) => m.saldoDespues === null) ? '\n<i>En los movimientos sin "→" no sé cuánto quedó: antes no se guardaban los cambios de saldo a mano.</i>' : '';
-  return `<b>${esc(c.nombre)}</b> · saldo <b>${pesos(c.saldo)}</b>\nLo que movió el saldo (lo más nuevo arriba):\n\n${lineas.join('\n') || 'Sin movimientos todavía.'}${viejo}${pista}`;
+  const desde = movs.some((m) => m.tipo === 'ajuste') ? 'Después de tu último cambio a mano tenías' : completo ? 'Empezó en' : 'Antes de estos movimientos había';
+  const resumen = movs.length
+    ? `\n${desde} ${pesos(saldoAntes)}${entradas ? ` · entraron +${pesos(entradas)}` : ''}${salidas ? ` · salieron −${pesos(salidas)}` : ''} → hoy <b>${pesos(c.saldo)}</b>\n`
+    : '';
+  return `<b>${esc(c.nombre)}</b> · saldo <b>${pesos(c.saldo)}</b>${resumen}\nLo que movió el saldo (lo más nuevo arriba):\n\n${lineas.join('\n') || 'Sin movimientos todavía.'}${viejo}${pista}`;
 }
 
 // ---------------------------------------------------------------------------

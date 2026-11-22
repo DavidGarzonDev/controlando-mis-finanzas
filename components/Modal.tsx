@@ -303,7 +303,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
         {tipo === 'cuenta' && (
           <>
             <EditorPlastico clase="debito" item={item} />
-            <Campo label="Saldo actual"><Monto name="saldo" defaultValue={item?.saldo} opcional /></Campo>
+            <Campo label="Saldo actual" ayuda="Si está en negativo, escribe el menos (−) adelante"><Monto name="saldo" defaultValue={item?.saldo} opcional negativo /></Campo>
             <label className="interruptor">
               <input type="checkbox" name="principal" defaultChecked={item?.principal ?? !cuentas.some((c) => c.principal)} />
               <span>
@@ -638,7 +638,9 @@ function Campo({ label, ayuda, children }: { label: string; ayuda?: string; chil
 }
 
 /** Campo de dinero que pone los puntos de miles mientras escribes. */
-function Monto({ name, defaultValue, autoFocus, opcional }: { name: string; defaultValue?: number; autoFocus?: boolean; opcional?: boolean }) {
+function Monto({ name, defaultValue, autoFocus, opcional, negativo }: {
+  name: string; defaultValue?: number; autoFocus?: boolean; opcional?: boolean; negativo?: boolean;
+}) {
   const [v, setV] = useState(defaultValue ? Math.round(defaultValue).toLocaleString('es-CO') : '');
   return (
     <div className="monto">
@@ -654,10 +656,18 @@ function Monto({ name, defaultValue, autoFocus, opcional }: { name: string; defa
         pattern={opcional ? undefined : '[0-9.]*[1-9][0-9.]*'}
         title="Escribe un monto mayor que cero"
         onChange={(e) => {
+          // Con `negativo`, se respeta el menos de adelante (saldos de cuenta que quedaron en rojo).
+          const menos = negativo && /^\s*[-−]/.test(e.target.value) ? '-' : '';
           const solo = e.target.value.replace(/\D/g, '').slice(0, 12);
-          setV(solo ? Number(solo).toLocaleString('es-CO') : '');
+          setV(solo ? menos + Number(solo).toLocaleString('es-CO') : menos);
         }}
       />
+      {negativo && (
+        <button type="button" className="monto-signo" aria-pressed={v.startsWith('-')} aria-label="Cambiar a negativo o positivo"
+          onClick={() => setV((x) => (x.startsWith('-') ? x.slice(1) : `-${x}`))}>
+          ±
+        </button>
+      )}
     </div>
   );
 }
@@ -671,12 +681,12 @@ function HistorialCuenta({ id }: { id: number }) {
   const [abierto, setAbierto] = useState(false);
   useEffect(() => {
     if (!abierto || datos) return;
-    movimientosDeCuenta(id).then(setDatos).catch(() => setDatos({ cuenta: null, movs: [] }));
+    movimientosDeCuenta(id).then(setDatos).catch(() => setDatos({ cuenta: null, movs: [], saldoAntes: 0, entradas: 0, salidas: 0, completo: true }));
   }, [abierto, datos, id]);
   const f = (d: string) => new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   // Dónde empezó a estar en negativo (de lo más nuevo hacia atrás)
   let inicioNegativo = -1;
-  if (datos) for (let i = 0; i < datos.movs.length && (datos.movs[i].saldoDespues ?? 0) < 0; i++) inicioNegativo = i;
+  if (datos) for (let i = 0; i < datos.movs.length && datos.movs[i].saldoDespues !== null && (datos.movs[i].saldoDespues ?? 0) < 0; i++) inicioNegativo = i;
   return (
     <details className="historial-cuenta" onToggle={(e) => setAbierto((e.target as HTMLDetailsElement).open)}>
       <summary>Ver qué movió el saldo</summary>
@@ -686,9 +696,16 @@ function HistorialCuenta({ id }: { id: number }) {
         <p className="nota">Esta cuenta todavía no tiene movimientos.</p>
       ) : (
         <>
+          <p className="historial-resumen">
+            {datos.movs.some((m) => m.tipo === 'ajuste') ? 'Después de tu último cambio a mano tenías' : datos.completo ? 'Empezó en' : 'Antes de estos movimientos había'}{' '}
+            <b className="num">{pesos(datos.saldoAntes)}</b>
+            {datos.entradas > 0 && <> · entraron <b className="num pos">+{pesos(datos.entradas)}</b></>}
+            {datos.salidas > 0 && <> · salieron <b className="num">−{pesos(datos.salidas)}</b></>}
+            {' '}→ hoy <b className={`num ${datos.cuenta && datos.cuenta.saldo < 0 ? 'neg' : ''}`}>{pesos(datos.cuenta?.saldo ?? 0)}</b>
+          </p>
           {inicioNegativo >= 0 && (
             <p className="historial-alerta">
-              Quedó en negativo desde <b>{datos.movs[inicioNegativo].concepto}</b>. Si esos gastos ya los habías hecho antes de poner
+              Quedó en negativo con <b>{datos.movs[inicioNegativo].concepto}</b>. Si esos gastos ya los habías hecho antes de poner
               el saldo, se descontaron dos veces: corrige el <b>Saldo actual</b> arriba con lo que tienes ahora.
             </p>
           )}

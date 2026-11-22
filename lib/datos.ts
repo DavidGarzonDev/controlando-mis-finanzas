@@ -496,9 +496,13 @@ export type MovCuenta = {
  * Todo lo que movió el saldo de una cuenta (lo más nuevo primero), con el saldo que quedó después de cada cosa.
  * Se calcula hacia atrás desde el saldo actual; los cambios de saldo a mano aparecen como "ajuste".
  */
-export async function movimientosCuenta(id: number, limite = 40): Promise<{ cuenta: Cuenta | null; movs: MovCuenta[] }> {
+export async function movimientosCuenta(id: number, limite = 40): Promise<{
+  cuenta: Cuenta | null; movs: MovCuenta[];
+  /** Cuánto había antes del movimiento más viejo de la lista (si no hubo cambios a mano sin anotar). */
+  saldoAntes: number; entradas: number; salidas: number; completo: boolean;
+}> {
   const cuenta = (await cuentas()).find((c) => c.id === id) ?? null;
-  if (!cuenta) return { cuenta: null, movs: [] };
+  if (!cuenta) return { cuenta: null, movs: [], saldoAntes: 0, entradas: 0, salidas: 0, completo: true };
   const rows = await sql().query(
     `SELECT * FROM (
        SELECT fecha, 'gasto' AS tipo, concepto, -monto AS delta, NULL::int AS antes, NULL::int AS despues FROM gastos WHERE cuenta_id = $1
@@ -525,7 +529,13 @@ export async function movimientosCuenta(id: number, limite = 40): Promise<{ cuen
     saldo = r.tipo === 'ajuste' ? n(r.antes) : saldo - n(r.delta);
     return m;
   });
-  return { cuenta, movs };
+  // Totales desde el último ajuste a mano (o desde el principio de la lista)
+  const hastaAjuste = movs.findIndex((m) => m.tipo === 'ajuste');
+  const tramo = hastaAjuste >= 0 ? movs.slice(0, hastaAjuste) : movs;
+  const entradas = tramo.filter((m) => m.delta > 0).reduce((s, m) => s + m.delta, 0);
+  const salidas = tramo.filter((m) => m.delta < 0).reduce((s, m) => s - m.delta, 0);
+  const saldoAntes = hastaAjuste >= 0 ? movs[hastaAjuste].saldoDespues ?? 0 : saldo;
+  return { cuenta, movs, saldoAntes, entradas, salidas, completo: rows.length < limite };
 }
 /** La cuenta de efectivo; si no existe, la crea en $0. */
 export async function cuentaEfectivo(): Promise<Cuenta> {

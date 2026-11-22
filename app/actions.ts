@@ -8,6 +8,8 @@ import { CATEGORIAS, normalizarCategoria } from '@/lib/categorias';
 
 const texto = (fd: FormData, k: string) => String(fd.get(k) ?? '').trim();
 const entero = (fd: FormData, k: string) => Math.max(0, Math.round(Number(String(fd.get(k) ?? '').replace(/[^\d]/g, '')) || 0));
+/** Como `entero`, pero respeta el signo menos (un saldo de cuenta puede estar en negativo). */
+const conSigno = (fd: FormData, k: string) => (String(fd.get(k) ?? '').trim().startsWith('-') ? -1 : 1) * entero(fd, k);
 const idDe = (fd: FormData, k = 'id') => Number(fd.get(k)) || null;
 /** Día del mes (1 a 31) o null. */
 const diaDe = (fd: FormData, k: string) => {
@@ -125,7 +127,7 @@ export async function guardarCuenta(fd: FormData) {
   await db.guardarCuenta(idDe(fd), {
     nombre: texto(fd, 'nombre') || 'Cuenta',
     banco: texto(fd, 'banco') || null,
-    saldo: entero(fd, 'saldo'),
+    saldo: conSigno(fd, 'saldo'),
     ultimos4: ultimos4De(fd),
     franquicia: texto(fd, 'franquicia') || null,
     color: colorDe(fd),

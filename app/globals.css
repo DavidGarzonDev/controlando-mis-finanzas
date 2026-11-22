@@ -2661,3 +2661,19 @@ html, body { overflow-x: clip; }
 .historial-lista li.neg .historial-cifras small { color: var(--rojo); font-weight: 650; }
 .historial-lista li.ajuste { background: var(--azul-suave); border-radius: 10px; padding-inline: 8px; }
 .historial-lista li.quiebre { box-shadow: inset 3px 0 0 var(--rojo); padding-left: 10px; }
+
+.historial-resumen { margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--papel-2); font-size: 0.88rem; line-height: 1.6; }
+.monto { position: relative; }
+.monto-signo {
+  flex: none;
+  width: 40px;
+  height: 36px;
+  margin: 0 8px 0 6px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--papel);
+  color: var(--tinta-2);
+  font: 700 1.1rem var(--fuente);
+  cursor: pointer;
+}
+.monto-signo[aria-pressed='true'] { background: var(--rojo-suave); color: var(--rojo); border-color: transparent; }
