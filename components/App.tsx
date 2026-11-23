@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
-  ChartPie, ChartSpline, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
+  ChartPie, ChartSpline, Heart, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
 } from 'lucide-react';
 import { borrar, marcarFijo } from '@/app/actions';
 import { comercioDe } from '@/lib/comercios';
@@ -209,6 +209,9 @@ export default function App(p: Props) {
         <div className="lateral-pie">
           <button className="btn primario registrar" aria-label="Registrar" onClick={() => setEditor({ tipo: 'nuevo', modo: 'gasto' })}>
             <Plus size={22} aria-hidden /> <span>Registrar</span>
+          </button>
+          <button type="button" className="salir apoyo solo-escritorio" onClick={() => { ir('plan'); setTimeout(() => document.getElementById('apoyar')?.scrollIntoView({ behavior: 'smooth' }), 150); }}>
+            <Heart size={16} aria-hidden /> Apoya Pilas
           </button>
           <form action={salir} className="solo-escritorio">
             <button className="salir"><LogOut size={16} aria-hidden /> Cerrar sesión</button>

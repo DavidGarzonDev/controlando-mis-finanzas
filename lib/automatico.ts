@@ -1,7 +1,7 @@
 import * as db from './datos';
 import { asegurarEsquema } from './esquema';
 import { bancoEnTexto } from './bancos';
-import { interpretarConIA } from './gemini';
+import { interpretarConIA } from './ia';
 import { tarjetaGasto, tarjetaIngreso, type Tarjeta } from './mensajes';
 import { leerNotificacion, type Notificacion } from './notificaciones';
 import { adivinarCategoria } from './parser';

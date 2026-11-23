@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ClipboardList, CornerDownLeft, Download, Gauge, LayoutDashboard,
-  LogOut, MessageSquareText, PiggyBank, Sparkles, Plus, Search, Target, WalletCards,
+  Heart, LogOut, MessageSquareText, PiggyBank, Sparkles, Plus, Search, Target, WalletCards,
 } from 'lucide-react';
 import { registrarTexto, tocarBoton } from '@/app/actions';
 import { salir } from '@/app/entrar/acciones';
@@ -55,6 +55,7 @@ export function Paleta({ abierta, cerrar, ir, abrir, mes, verAnio }: {
       { id: 'tarjeta', titulo: 'Agregar tarjeta de crédito', Icono: WalletCards, hacer: () => abrir({ tipo: 'deuda', nuevoTipo: 'tarjeta' }) },
       { id: 'cuenta', titulo: 'Agregar cuenta o efectivo', Icono: PiggyBank, hacer: () => abrir({ tipo: 'cuenta' }) },
       { id: 'excel', titulo: 'Descargar movimientos en Excel', Icono: Download, hacer: () => { window.location.href = `/api/exportar?desde=${mes}`; } },
+      { id: 'apoyar', titulo: 'Apoya Pilas', detalle: 'Donaciones y estrella en GitHub', Icono: Heart, hacer: () => { ir('plan'); setTimeout(() => document.getElementById('apoyar')?.scrollIntoView({ behavior: 'smooth' }), 200); } },
       { id: 'anio', titulo: 'Tu año en Pilas', detalle: 'El resumen del año en historias', Icono: Sparkles, hacer: verAnio },
       { id: 'salir', titulo: 'Cerrar sesión', detalle: 'Para volver a entrar necesitas clave y código', Icono: LogOut, hacer: () => { void salir(); } },
     ];

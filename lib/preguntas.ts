@@ -1,7 +1,7 @@
 import { sql } from './db';
 import * as db from './datos';
 import { ZONA } from './config';
-import { preguntarIA } from './gemini';
+import { preguntarIA } from './ia';
 import { esc } from './telegram';
 
 /**
@@ -68,7 +68,7 @@ export async function responderPregunta(pregunta: string): Promise<string> {
   const r = await preguntarIA(SISTEMA, `DATOS:\n${datos}\n\nPREGUNTA: ${pregunta.slice(0, 400)}`);
   if (!r.ok) {
     return r.motivo === 'sin_clave'
-      ? 'Para responder preguntas necesito la IA (GEMINI_API_KEY en Vercel).'
+      ? 'Para responder preguntas necesito una IA configurada (por ejemplo GEMINI_API_KEY en Vercel; mira el README).'
       : r.motivo === 'limite'
         ? 'La IA ya llegó a su límite de hoy. Intenta mañana o mira /resumen.'
         : 'No pude pensar la respuesta ahora. Intenta otra vez en un momento.';

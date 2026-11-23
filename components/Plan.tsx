@@ -10,6 +10,7 @@ import { Contador } from './animacion';
 import { colorCat, fechaLarga, pesos, todasCategorias } from './util';
 import { IconoCat } from './IconoCat';
 import { Conexiones } from './Conexiones';
+import { Apoyar } from './Apoyar';
 
 export function Plan({ fijos, metas, retos, r, mes, abrir, avisar }: {
   fijos: Fijo[]; metas: Meta[]; retos: Reto[]; r: Resumen; mes: string; abrir: (e: Editor) => void; avisar: (m: string) => void;
@@ -21,6 +22,7 @@ export function Plan({ fijos, metas, retos, r, mes, abrir, avisar }: {
       <Topes r={r} abrir={abrir} />
       <Fijos fijos={fijos} mes={mes} abrir={abrir} avisar={avisar} />
       {r.esActual && <Conexiones avisar={avisar} />}
+      <Apoyar />
     </div>
   );
 }

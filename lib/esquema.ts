@@ -119,10 +119,8 @@ const SENTENCIAS = [
   `CREATE TABLE IF NOT EXISTS llaves_acceso (
     id TEXT PRIMARY KEY, llave_publica TEXT NOT NULL, contador BIGINT NOT NULL DEFAULT 0, transportes TEXT,
     nombre TEXT NOT NULL, creada TIMESTAMPTZ NOT NULL DEFAULT now(), ultimo_uso TIMESTAMPTZ)`,
-  // Registro automático: tokens para el celular (Atajos / MacroDroid) y notificaciones ya vistas
-  `CREATE TABLE IF NOT EXISTS tokens_api (
-    id SERIAL PRIMARY KEY, huella TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL,
-    creado TIMESTAMPTZ NOT NULL DEFAULT now(), ultimo_uso TIMESTAMPTZ)`,
+  // Notificaciones del banco que pegas en el bot (para no registrar dos veces la misma)
+  `DROP TABLE IF EXISTS tokens_api`,
   `CREATE TABLE IF NOT EXISTS notificaciones_vistas (huella TEXT PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now())`,
   // Categorías que crea el usuario, con su emoji y color
   `CREATE TABLE IF NOT EXISTS categorias_propias (

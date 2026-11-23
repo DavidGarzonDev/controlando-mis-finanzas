@@ -4,7 +4,7 @@ import { pareceNotificacion } from './notificaciones';
 import { alertasGasto } from './alertas';
 import { esPregunta } from './preguntas';
 import { extraerMonto, interpretar } from './parser';
-import { interpretarConIA } from './gemini';
+import { interpretarConIA } from './ia';
 import { generarConsejos, simularPago, tasaMensual } from './consejos';
 import { CATALOGO, crearReto, retos as cargarRetos, retosParaAvisar } from './retos';
 import { asegurarEsquema } from './esquema';

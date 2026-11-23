@@ -1,5 +1,5 @@
 import { manejarMensaje, procesarBoton, type Respuesta } from '@/lib/bot';
-import { leerMedio } from '@/lib/gemini';
+import { leerMedio } from '@/lib/ia';
 import { enviarResumenSemanal } from '@/lib/semanal';
 import { asegurarComandos, asegurarWebhookConBotones, descargarArchivo, editarMensaje, enviarConMenu, enviarMensaje, esc, responderBoton } from '@/lib/telegram';
 
@@ -33,7 +33,8 @@ async function textoDelMensaje(msg: any): Promise<{ texto: string; leido?: strin
     return {
       error:
         r.motivo === 'limite' ? 'La IA ya llegó a su límite de hoy. Escríbemelo: <code>almuerzo 15000</code>'
-        : r.motivo === 'sin_clave' ? 'Para entender audios y fotos necesito la clave de Gemini (GEMINI_API_KEY).'
+        : r.motivo === 'sin_clave' ? 'Para entender audios y fotos necesito una IA configurada (por ejemplo GEMINI_API_KEY en Vercel).'
+        : r.motivo === 'no_soporta' ? 'La IA que tienes configurada no entiende notas de voz (Gemini, OpenAI y Groq sí). Escríbemelo: <code>almuerzo 15000</code>'
         : 'No pude entender eso. Escríbemelo: <code>almuerzo 15000</code>',
     };
   }

@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
-import { Bell, BellOff, Check, Copy, Fingerprint, Plug, Smartphone, Trash2, Zap } from 'lucide-react';
+import { Bell, BellOff, Bot, Fingerprint, Plug, Trash2 } from 'lucide-react';
 import {
-  activarPush, borrarLlaveAuto, crearLlaveAuto, desactivarPush, dispositivosPush, guardarNuevaLlave, listaLlaves, llavePush,
-  llavesAuto, opcionesNuevaLlave, quitarLlave, registrarTexto,
+  activarPush, desactivarPush, dispositivosPush, estadoDeLaIA, guardarNuevaLlave, listaLlaves, llavePush, opcionesNuevaLlave, probarIA, quitarLlave,
 } from '@/app/actions';
 
 type Avisar = (m: string) => void;
@@ -23,11 +22,11 @@ export function Conexiones({ avisar }: { avisar: Avisar }) {
       <div className="bloque-cab">
         <div>
           <h2 id="t-conexiones"><Plug size={18} aria-hidden className="ico-titulo" /> Conexiones y seguridad</h2>
-          <p className="sub">Que Pilas registre solo tus compras, entrar con tu huella y recibir avisos en el celular.</p>
+          <p className="sub">Entrar con tu huella, recibir avisos en el celular y elegir la inteligencia artificial.</p>
         </div>
       </div>
       <div className="conexiones-grid">
-        <RegistroAutomatico avisar={avisar} />
+        <TarjetaIA />
         <Huella avisar={avisar} />
         <Notificaciones avisar={avisar} />
       </div>
@@ -36,114 +35,6 @@ export function Conexiones({ avisar }: { avisar: Avisar }) {
 }
 
 // ---------------------------------------------------------------------------
-
-function Copiar({ texto, etiqueta }: { texto: string; etiqueta: string }) {
-  const [ok, setOk] = useState(false);
-  return (
-    <div className="copiar">
-      <small>{etiqueta}</small>
-      <code>{texto}</code>
-      <button type="button" className="btn chico" onClick={async () => { await navigator.clipboard?.writeText(texto).catch(() => {}); setOk(true); setTimeout(() => setOk(false), 1500); }}>
-        {ok ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />} {ok ? 'Copiado' : 'Copiar'}
-      </button>
-    </div>
-  );
-}
-
-function RegistroAutomatico({ avisar }: { avisar: Avisar }) {
-  const [datos, setDatos] = useState<Awaited<ReturnType<typeof llavesAuto>> | null>(null);
-  const [nueva, setNueva] = useState<{ llave: string; url: string } | null>(null);
-  const [guia, setGuia] = useState<'android' | 'iphone' | 'bot'>(() => (typeof navigator !== 'undefined' && /iPhone|iPad/.test(navigator.userAgent) ? 'iphone' : 'android'));
-  const [prueba, setPrueba] = useState('');
-  const [resultado, setResultado] = useState<string | null>(null);
-  const [pendiente, iniciar] = useTransition();
-  const cargar = () => llavesAuto().then(setDatos).catch(() => {});
-  useEffect(() => { cargar(); }, []);
-  const url = nueva?.url ?? datos?.url ?? '';
-  const llave = nueva?.llave ?? 'TU_LLAVE';
-
-  return (
-    <article className="conexion">
-      <header className="conexion-cab">
-        <span className="conexion-ico azul" aria-hidden><Zap size={20} /></span>
-        <div>
-          <h3>Registro automático</h3>
-          <p>Cuando te llegue la notificación de Nequi, Bancolombia, Nu… Pilas anota el gasto solo y te avisa por Telegram para corregirlo si hace falta.</p>
-        </div>
-      </header>
-
-      {nueva ? (
-        <div className="conexion-nueva">
-          <p className="nota"><b>Guarda esta llave ahora:</b> por seguridad no la vuelvo a mostrar.</p>
-          <Copiar etiqueta="Dirección (URL)" texto={nueva.url} />
-          <Copiar etiqueta="Llave" texto={nueva.llave} />
-        </div>
-      ) : (
-        <button className="btn primario" disabled={pendiente} onClick={() => iniciar(async () => { setNueva(await crearLlaveAuto(esteDispositivo())); cargar(); })}>
-          <Smartphone size={18} aria-hidden /> {datos?.llaves.length ? 'Conectar otro celular' : 'Conectar mi celular'}
-        </button>
-      )}
-
-      <div className="segmento chico" role="tablist" aria-label="Cómo conectarlo">
-        {(['android', 'iphone', 'bot'] as const).map((g) => (
-          <button key={g} role="tab" aria-selected={guia === g} className={guia === g ? 'on' : ''} onClick={() => setGuia(g)}>
-            {{ android: 'Android', iphone: 'iPhone', bot: 'Sin apps' }[g]}
-          </button>
-        ))}
-      </div>
-      {guia === 'android' && (
-        <ol className="guia">
-          <li>Instala <b>MacroDroid</b> (gratis) y toca <b>Agregar macro</b>.</li>
-          <li>Disparador: <b>Notificación → Notificación recibida</b>. Elige las apps: Nequi, Bancolombia, Nu, Daviplata… y “cualquier contenido”.</li>
-          <li>Acción: <b>Conectividad → Solicitud HTTP</b>. Método <b>POST</b>, URL: <code>{url}</code></li>
-          <li>Encabezado: <code>Authorization</code> = <code>Bearer {llave}</code></li>
-          <li>Cuerpo (JSON): <code>{'{"texto": "[notification_title] [notification]", "app": "[app_name]"}'}</code></li>
-          <li>Guarda la macro. Listo: cada compra llega sola a Pilas.</li>
-        </ol>
-      )}
-      {guia === 'iphone' && (
-        <ol className="guia">
-          <li>En iPhone no se pueden leer las notificaciones de otras apps, pero sí los <b>SMS del banco</b> y los pagos con <b>Apple Pay</b>.</li>
-          <li>Abre <b>Atajos → Automatización → Nueva</b>: elige <b>Mensaje</b>, “el mensaje contiene” <b>Bancolombia</b> (o tu banco) y marca <b>Ejecutar de inmediato</b>.</li>
-          <li>Acción: <b>Obtener contenido de URL</b>. URL: <code>{url}</code>, Método <b>POST</b>.</li>
-          <li>Encabezado <code>Authorization</code> = <code>Bearer {llave}</code>. Cuerpo JSON: campo <code>texto</code> = <b>Contenido del mensaje</b>.</li>
-          <li>Para Apple Pay: automatización <b>Transacción</b> con la misma acción; en <code>texto</code> pon “Pagaste <b>Cantidad</b> en <b>Comercio</b>”.</li>
-        </ol>
-      )}
-      {guia === 'bot' && (
-        <ol className="guia">
-          <li>Mantén presionada la notificación o el SMS del banco y toca <b>Compartir</b> o <b>Copiar</b>.</li>
-          <li>Pégala en el chat del bot de Telegram. Pilas la entiende igual (comercio, monto y cuenta) y la registra.</li>
-        </ol>
-      )}
-
-      <details className="probar">
-        <summary>Probar con una notificación</summary>
-        <textarea value={prueba} onChange={(e) => setPrueba(e.target.value)} rows={2} placeholder="Ej: Pagaste $15.000 en D1 SAS" />
-        <button className="btn chico" disabled={pendiente || prueba.trim().length < 10} onClick={() => iniciar(async () => {
-          const r = await registrarTexto(prueba);
-          setResultado(r.html);
-          avisar('Probado');
-        })}>Registrar esta notificación</button>
-        {/* La respuesta viene del bot, ya escapada en el servidor (solo usa <b>, <i> y <s>) */}
-        {resultado && <p className="nota" dangerouslySetInnerHTML={{ __html: resultado.replace(/\n/g, '<br/>') }} />}
-      </details>
-
-      {!!datos?.llaves.length && (
-        <ul className="conexion-lista">
-          {datos.llaves.map((k) => (
-            <li key={k.id}>
-              <span><b>{k.nombre}</b><small>Último uso: {fecha(k.ultimoUso)}</small></span>
-              <button className="icono-btn" aria-label={`Desconectar ${k.nombre}`} onClick={() => iniciar(async () => { await borrarLlaveAuto(k.id); cargar(); avisar('Desconectado'); })}>
-                <Trash2 size={16} aria-hidden />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
-  );
-}
 
 // ---------------------------------------------------------------------------
 
@@ -289,6 +180,48 @@ function Notificaciones({ avisar }: { avisar: Avisar }) {
           ))}
         </ul>
       )}
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+const MOTIVOS: Record<string, string> = {
+  sin_clave: 'La clave no sirve o falta. Revísala en Vercel.',
+  limite: 'Llegaste al límite de uso de hoy de ese proveedor.',
+  error: 'El proveedor no respondió bien. Revisa el modelo (IA_MODELO).',
+  no_entendio: 'Respondió, pero no entendió el ejemplo.',
+};
+
+/** Qué inteligencia artificial usa Pilas (cada quien pone su propia clave en Vercel). */
+function TarjetaIA() {
+  const [e, setE] = useState<Awaited<ReturnType<typeof estadoDeLaIA>> | null>(null);
+  const [prueba, setPrueba] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [pendiente, iniciar] = useTransition();
+  useEffect(() => { estadoDeLaIA().then(setE).catch(() => {}); }, []);
+  return (
+    <article className="conexion">
+      <header className="conexion-cab">
+        <span className="conexion-ico azul" aria-hidden><Bot size={20} /></span>
+        <div>
+          <h3>Inteligencia artificial</h3>
+          <p>Entiende mensajes raros, notas de voz y fotos de recibos, y responde tus preguntas. Usas tu propia clave: Gemini (tiene plan gratis), Claude, OpenAI, Groq, OpenRouter o DeepSeek.</p>
+        </div>
+      </header>
+      {!e ? (
+        <p className="nota">Revisando…</p>
+      ) : e.activa ? (
+        <>
+          <p className="ia-estado"><b>{e.nombre}</b> · <code>{e.modelo}</code>{!e.voz && <small> · sin notas de voz</small>}</p>
+          <button className="btn chico" disabled={pendiente} onClick={() => iniciar(async () => setPrueba(await probarIA()))}>
+            {pendiente ? 'Probando…' : 'Probar'}
+          </button>
+          {prueba && <p className={prueba.ok ? 'nota' : 'error'}>{prueba.ok ? `✓ ${prueba.texto}` : MOTIVOS[prueba.texto] ?? prueba.texto}</p>}
+        </>
+      ) : (
+        <p className="nota">No hay IA configurada. El bot funciona igual con su intérprete propio. Para activarla, agrega en Vercel <code>GEMINI_API_KEY</code> (gratis en aistudio.google.com) o la de tu proveedor; mira el README.</p>
+      )}
+      <p className="sub">Para cambiarla: <code>IA_PROVEEDOR</code> (gemini, claude, openai, groq, openrouter, deepseek) e <code>IA_MODELO</code> en las variables de Vercel.</p>
     </article>
   );
 }

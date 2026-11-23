@@ -229,6 +229,20 @@ export async function datosAnio(anio: number) {
   return db.resumenAnio(Math.max(2020, Math.min(2100, Math.round(Number(anio)) || new Date().getFullYear())));
 }
 
+/** Qué IA está activa (para Conexiones). No expone la clave. */
+export async function estadoDeLaIA() {
+  await listo();
+  const { estadoIA } = await import('@/lib/ia');
+  return estadoIA();
+}
+/** Prueba la IA con un mensaje corto y dice si respondió. */
+export async function probarIA() {
+  await listo();
+  const { interpretarConIA } = await import('@/lib/ia');
+  const r = await interpretarConIA('me gasté 20 lucas en el parche con los amigos');
+  return r.ok ? { ok: true, texto: `Entendió: ${r.dato.concepto} $${r.dato.monto.toLocaleString('es-CO')} · ${r.dato.categoria}` } : { ok: false, texto: r.motivo };
+}
+
 // ---------------------------------------------------------------------------
 // Notificaciones de la app (push)
 
@@ -305,7 +319,7 @@ export async function quitarLlave(id: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Conexiones: registro automático desde el celular
+// Utilidades
 
 /** Dirección pública de la app (para armar el enlace que va en el Atajo / MacroDroid). */
 async function origen() {
@@ -314,25 +328,6 @@ async function origen() {
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
   const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
   return `${proto}://${host}`;
-}
-
-/** Crea una llave para el celular. Se muestra una sola vez (en la base solo queda su huella). */
-export async function crearLlaveAuto(nombre: string) {
-  await listo();
-  const { aleatorio, huella } = await import('@/lib/sesion');
-  const llave = `pilas_${aleatorio(24)}`;
-  await db.crearToken(await huella(`api:${llave}`), (nombre || 'Mi celular').slice(0, 40));
-  refrescar();
-  return { llave, url: `${await origen()}/api/registro` };
-}
-export async function llavesAuto() {
-  await listo();
-  return { llaves: await db.tokens(), url: `${await origen()}/api/registro` };
-}
-export async function borrarLlaveAuto(id: number) {
-  await listo();
-  await db.borrarToken(Number(id));
-  refrescar();
 }
 
 /** Lo que movió el saldo de una cuenta (para entender por qué quedó en lo que quedó). */

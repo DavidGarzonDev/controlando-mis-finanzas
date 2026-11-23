@@ -33,5 +33,5 @@ function conCabeceras(res: NextResponse) {
 }
 
 export const config = {
-  matcher: ['/((?!api/telegram|api/cron|api/registro|sw.js|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|logo-|fondo-).*)'],
+  matcher: ['/((?!api/telegram|api/cron|sw.js|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|logo-|fondo-).*)'],
 };

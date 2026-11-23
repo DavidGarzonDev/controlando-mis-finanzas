@@ -762,22 +762,6 @@ export async function gastoReciente(monto: number, minutos = 20): Promise<Gasto 
   return rows[0] ? filaGasto(rows[0]) : null;
 }
 
-export type TokenApi = { id: number; nombre: string; creado: string; ultimoUso: string | null };
-export async function crearToken(huella: string, nombre: string) {
-  await sql()`INSERT INTO tokens_api (huella, nombre) VALUES (${huella}, ${nombre.slice(0, 40)})`;
-}
-export async function tokenValido(huella: string): Promise<boolean> {
-  const rows = await sql()`UPDATE tokens_api SET ultimo_uso = now() WHERE huella = ${huella} RETURNING id`;
-  return rows.length > 0;
-}
-export async function tokens(): Promise<TokenApi[]> {
-  const rows = await sql()`SELECT id, nombre, creado, ultimo_uso FROM tokens_api ORDER BY creado DESC`;
-  return rows.map((r) => ({ id: n(r.id), nombre: String(r.nombre), creado: String(r.creado), ultimoUso: r.ultimo_uso ? String(r.ultimo_uso) : null }));
-}
-export async function borrarToken(id: number) {
-  await sql()`DELETE FROM tokens_api WHERE id = ${id}`;
-}
-
 // ---------- Semana ----------
 
 export type Semana = {

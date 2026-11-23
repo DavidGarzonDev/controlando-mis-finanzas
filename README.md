@@ -2,11 +2,21 @@
 
 Escribes tus gastos en Telegram (`almuerzo 15 mil`) y los ves en un dashboard web.
 
-Un intérprete hecho a mano entiende casi todos los mensajes. Gemini solo se usa cuando no entiende alguno o no sabe la categoría.
+Un intérprete hecho a mano entiende casi todos los mensajes. La inteligencia artificial solo se usa cuando no entiende alguno, para notas de voz y fotos de recibos, y para responder preguntas. **Tú eliges cuál** (Gemini, Claude, OpenAI, Groq, OpenRouter o DeepSeek) con **tu propia clave**.
 
-Proyecto abierto: cualquiera puede clonarlo y montar su propia versión siguiendo los pasos de abajo. Cada quien usa su propio bot, su base de datos y sus claves; nada se comparte.
+Proyecto abierto y **gratis**: cualquiera puede montar su propia versión siguiendo los pasos de abajo. Cada quien usa su propio bot, su base de datos y sus claves; nada se comparte entre personas y nadie más ve tus datos.
 
-**Stack:** Next.js en Vercel · Postgres en Neon (plan gratis) · Telegram Bot API · Gemini Flash-Lite (plan gratis).
+**Stack:** Next.js en Vercel · Postgres en Neon (plan gratis) · Telegram Bot API · la IA que quieras (Gemini tiene plan gratis).
+
+**¿Cuánto cuesta?** Nada, si usas los planes gratis: Vercel Hobby, Neon Free, Telegram y Gemini (tiene un límite diario de uso gratis). Una persona usa una fracción muy pequeña de esos límites.
+
+[![Desplegar en Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FDavidGarzonDev%2Fcontrolando-mis-finanzas&project-name=pilas&repository-name=pilas&env=TELEGRAM_BOT_TOKEN,TELEGRAM_WEBHOOK_SECRET,DASHBOARD_PASSWORD,CRON_SECRET&envDescription=Token%20del%20bot%2C%20un%20secreto%20para%20el%20webhook%2C%20tu%20contrase%C3%B1a%20y%20un%20secreto%20para%20los%20recordatorios&envLink=https%3A%2F%2Fgithub.com%2FDavidGarzonDev%2Fcontrolando-mis-finanzas%23paso-4--desplegar-en-vercel)
+
+El botón copia el proyecto a tu GitHub y lo despliega en tu Vercel. Igual sigue los pasos 1, 2, 5, 6 y 7.
+
+## ❤️ Apoya el proyecto
+
+Pilas es gratis. Si te sirve, puedes invitarme un tinto: los enlaces están en la app (**Plan → Apoya Pilas**) y en el botón **Sponsor** del repositorio. Una ⭐ en GitHub también ayuda.
 
 ---
 
@@ -16,10 +26,25 @@ Proyecto abierto: cualquiera puede clonarlo y montar su propia versión siguiend
 2. Dale un nombre (ej. *Mis Finanzas*) y un usuario que termine en `bot` (ej. `finanzas_tunombre_bot`).
 3. Copia el **token** que te da (algo como `123456:ABC-...`). Es tu `TELEGRAM_BOT_TOKEN`. No lo compartas.
 
-## Paso 2 — Clave de Gemini
+## Paso 2 — La inteligencia artificial (opcional, recomendada)
 
-1. En Google AI Studio → **Proyectos**, crea un proyecto nuevo (ej. *bot-finanzas*).
-2. En **Claves de API** → *Crear clave de API*, elígelo y copia la clave. Es tu `GEMINI_API_KEY`.
+Sin IA el bot funciona igual con su intérprete propio; con IA entiende mensajes raros, notas de voz, fotos de recibos y preguntas. Cada persona usa **su propia clave**, así que a nadie le cuesta lo de los demás.
+
+| Proveedor | Variable de la clave | Modelo por defecto | Notas de voz | Precio |
+|---|---|---|---|---|
+| **Gemini** (Google AI Studio) | `GEMINI_API_KEY` | `gemini-3.1-flash-lite` | Sí | **Plan gratis** (recomendado) |
+| Claude (Anthropic) | `ANTHROPIC_API_KEY` | `claude-opus-5-5` | No | De pago (pon `IA_MODELO=claude-haiku-5-5` para gastar menos) |
+| OpenAI | `OPENAI_API_KEY` | `gpt-4.1-mini` | Sí | De pago |
+| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | Sí | Tiene plan gratis |
+| OpenRouter | `OPENROUTER_API_KEY` | `openrouter/auto` | No | Tiene modelos gratis |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat` | No | De pago, barato |
+| Otro compatible con OpenAI | `IA_API_KEY` + `IA_BASE_URL` | el que pongas en `IA_MODELO` | No | — |
+
+- Basta con poner **una** de esas claves en Vercel; Pilas usa la primera que encuentre (en ese orden).
+- Para elegir uno a la fuerza: `IA_PROVEEDOR` = `gemini`, `claude`, `openai`, `groq`, `openrouter`, `deepseek` o `compatible`. Para otro modelo: `IA_MODELO`.
+- En la app, **Plan → Conexiones y seguridad → Inteligencia artificial** te dice cuál está activa y tiene un botón para **probarla**.
+
+Para Gemini gratis: en Google AI Studio → **Claves de API** → *Crear clave de API* y copia la clave. Es tu `GEMINI_API_KEY`.
 
 ## Paso 3 — Subir el código a GitHub
 
@@ -43,8 +68,7 @@ Proyecto abierto: cualquiera puede clonarlo y montar su propia versión siguiend
    | `TELEGRAM_BOT_TOKEN` | el token de BotFather |
    | `TELEGRAM_WEBHOOK_SECRET` | una clave inventada por ti, solo letras, números, `_` y `-` (ej. `finanzas_9x2k7q`) |
    | `TELEGRAM_CHAT_ID` | déjalo vacío por ahora (paso 7) |
-   | `GEMINI_API_KEY` | tu clave de Gemini |
-   | `GEMINI_MODEL` | `gemini-3.1-flash-lite` |
+   | `GEMINI_API_KEY` | tu clave de Gemini (o la de otro proveedor, paso 2) |
    | `DASHBOARD_PASSWORD` | la contraseña para abrir tu dashboard |
    | `CRON_SECRET` | otra clave inventada (mínimo 16 caracteres), para los recordatorios diarios por Telegram |
 
@@ -154,13 +178,15 @@ Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cua
 Abre `https://TU-APP.vercel.app`: escribe tu `DASHBOARD_PASSWORD` y luego el **código de 6 dígitos** que te llega al Telegram (vence en 5 minutos).
 
 **Conexiones (Plan → Conexiones y seguridad)**
-- **Registro automático:** crea una llave y configura tu celular para que mande las notificaciones del banco a `POST /api/registro` (con `Authorization: Bearer <llave>`). Android: MacroDroid o Tasker (disparador "notificación recibida"). iPhone: Atajos con los SMS del banco o con Apple Pay. Sin apps: pega la notificación en el chat del bot. Pilas reconoce Nequi, Bancolombia, Nu, Daviplata, Davivienda, AV Villas…, elige la cuenta por los últimos 4 dígitos o el banco, manda las compras con tarjeta de crédito a la tarjeta, y no registra dos veces lo mismo.
+- **Inteligencia artificial:** cuál está activa (proveedor y modelo) y un botón para probarla.
 - **Huella o Face ID (passkeys):** actívalo en cada dispositivo; la clave + código de Telegram quedan de respaldo.
 - **Notificaciones de la app:** recordatorio diario, resumen del domingo y alertas. Las llaves se crean solas (no hay que configurar nada). En iPhone, con la app instalada en la pantalla de inicio.
 
+**Pegar notificaciones del banco:** copia la notificación o el SMS de Nequi, Bancolombia, Nu, Daviplata, Davivienda, AV Villas… y pégalo en el chat del bot. Lo registra solo (comercio, monto y cuenta por los últimos 4 dígitos o el banco; con tarjeta de crédito va a la tarjeta) y no registra dos veces lo mismo.
+
 **Alertas inteligentes:** al registrar un gasto, Pilas avisa si se parece a uno de hace pocos minutos (¿duplicado?), si es mucho más alto de lo normal en esa categoría, o si una suscripción subió de precio.
 
-**Pregúntale a Pilas:** escríbele al bot (o en la paleta Ctrl+K) preguntas como *¿cuánto gasté en gasolina este mes?* o *¿en qué se me fue la plata esta quincena?* y responde con tus cifras (usa Gemini).
+**Pregúntale a Pilas:** escríbele al bot (o en la paleta Ctrl+K) preguntas como *¿cuánto gasté en gasolina este mes?* o *¿en qué se me fue la plata esta quincena?* y responde con tus cifras (usa la IA que configuraste).
 
 **Tu año en Pilas:** el resumen del año en historias (en diciembre y enero aparece en el Resumen; siempre desde la paleta Ctrl+K).
 
@@ -204,7 +230,8 @@ y en `.env.local`: `DATABASE_URL=postgresql://postgres@localhost:5432/postgres` 
 ```
 app/api/telegram/route.ts  → recibe los mensajes de Telegram
 lib/parser.ts              → intérprete hecho a mano (montos y categorías)
-lib/gemini.ts              → respaldo con IA
+lib/ia.ts                  → la IA que elijas (lib/ia/: gemini, claude, openai y compatibles)
+lib/proyecto.ts            → nombre del proyecto y enlaces de donación
 lib/bot.ts                 → comandos y respuestas del bot
 lib/datos.ts               → consultas a la base de datos y cálculo del resumen
 lib/consejos.ts            → recomendaciones y plan de pago de deudas (bola de nieve)
@@ -227,4 +254,4 @@ db/seed.example.sql        → datos de ejemplo (plantilla)
 
 - **El bot no responde:** abre `https://api.telegram.org/botTU_TOKEN/getWebhookInfo` y mira `last_error_message`. En Vercel → Logs ves los errores del servidor.
 - **"Falta DATABASE_URL":** conecta Neon (paso 5) y haz Redeploy.
-- **El bot dice que la IA llegó a su límite:** el plan gratis de Gemini se reinicia cada día. Mientras tanto, escribe los gastos con monto claro (`almuerzo 15000`) y se registran igual.
+- **El bot dice que la IA llegó a su límite:** los planes gratis (como el de Gemini) se reinician cada día. Mientras tanto, escribe los gastos con monto claro (`almuerzo 15000`) y se registran igual.
