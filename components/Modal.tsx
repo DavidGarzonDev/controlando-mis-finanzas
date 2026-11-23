@@ -104,8 +104,8 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
       return;
     }
     try {
-      await accion(fd);
-      avisar(mensaje);
+      const r = (await accion(fd)) as { alerta?: string } | void;
+      avisar(r && r.alerta ? r.alerta : mensaje);
       ref.current?.close();
     } catch {
       setError('No se pudo guardar. Revisa tu conexión e inténtalo otra vez.');

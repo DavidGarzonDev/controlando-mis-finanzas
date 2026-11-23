@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation';
 import { bloqueo, cerrarSesion, claveCorrecta, crearSesion, enviarCodigo, registrarIntento, revisarCodigo } from '@/lib/acceso';
 import { asegurarEsquema } from '@/lib/esquema';
 import { quienEs } from '@/lib/guardia';
-import { COOKIE_DESAFIO, COOKIE_SESION, firmar, leerCookieSesion, verificar } from '@/lib/sesion';
+import { hayLlaves, opcionesEntrada, verificarEntrada } from '@/lib/llaves';
+import { COOKIE_DESAFIO, COOKIE_RETO, COOKIE_SESION, firmar, leerCookieSesion, leerReto, retoFirmado, verificar } from '@/lib/sesion';
 
 export type Estado = {
   paso: 'clave' | 'codigo';
@@ -84,6 +85,50 @@ export async function conCodigo(_: Estado, fd: FormData): Promise<Estado> {
     httpOnly: true, secure: seguro, sameSite: 'lax', path: '/', expires: new Date(s.vence),
   });
   redirect('/');
+}
+
+/** Entrar con huella / Face ID, paso 1: el reto que el celular debe firmar. */
+export async function opcionesHuella(): Promise<{ opciones?: unknown; error?: string }> {
+  await asegurarEsquema();
+  const { ip } = await quienEs();
+  const b = await bloqueo(ip);
+  if (b) return { error: textoBloqueo(b.hasta, b.global) };
+  const op = await opcionesEntrada();
+  if (!op) return { error: 'Todavía no activas la huella. Entra con tu clave y actívala en Plan → Conexiones.' };
+  (await cookies()).set(COOKIE_RETO, await retoFirmado(op.challenge), { httpOnly: true, secure: seguro, sameSite: 'strict', path: '/', maxAge: 300 });
+  return { opciones: op };
+}
+
+/** Entrar con huella / Face ID, paso 2: se verifica la firma y se abre la sesión. */
+export async function conHuella(respuesta: unknown): Promise<{ error?: string }> {
+  await asegurarEsquema();
+  const { ip, agente } = await quienEs();
+  const b = await bloqueo(ip);
+  if (b) return { error: textoBloqueo(b.hasta, b.global) };
+  const jar = await cookies();
+  const reto = await leerReto(jar.get(COOKIE_RETO)?.value);
+  jar.delete(COOKIE_RETO);
+  if (!reto) return { error: 'Se venció el tiempo. Toca el botón otra vez.' };
+  let dispositivo: string | null = null;
+  try {
+    dispositivo = await verificarEntrada(respuesta as Parameters<typeof verificarEntrada>[0], reto);
+  } catch {
+    dispositivo = null;
+  }
+  if (!dispositivo) {
+    await registrarIntento(ip, 'llave', false, agente);
+    return { error: 'No se pudo verificar tu huella. Inténtalo otra vez o entra con tu clave.' };
+  }
+  await registrarIntento(ip, 'llave', true, agente);
+  const s = await crearSesion(ip, `${agente} (huella: ${dispositivo})`, false);
+  jar.set(COOKIE_SESION, await firmar('sesion', `${s.id}.${s.vence}`), { httpOnly: true, secure: seguro, sameSite: 'lax', path: '/', expires: new Date(s.vence) });
+  redirect('/');
+}
+
+/** ¿Hay alguna huella/Face ID activada? (para mostrar el botón en la entrada) */
+export async function huellaActiva(): Promise<boolean> {
+  await asegurarEsquema();
+  return hayLlaves();
 }
 
 /** Volver al paso de la clave (por ejemplo, para pedir otro código). */

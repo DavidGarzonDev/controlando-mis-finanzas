@@ -48,9 +48,18 @@ export async function guardarGasto(fd: FormData) {
     cuentaId: await cuentaDe(fd),
   };
   const id = idDe(fd);
-  if (id) await db.actualizarGasto(id, datos);
-  else await db.insertarGasto({ ...datos, origen: 'web' });
+  if (id) {
+    await db.actualizarGasto(id, datos);
+    refrescar();
+    return {};
+  }
+  const nuevo = await db.insertarGasto({ ...datos, origen: 'web' });
   refrescar();
+  // Alertas inteligentes (duplicado, inusual, suscripción que subió): se muestran en el aviso
+  const { alertasGasto } = await import('@/lib/alertas');
+  const g = await db.gastoPorId(Number(nuevo));
+  const alertas = g ? await alertasGasto(g) : [];
+  return alertas.length ? { alerta: alertas[0].replace(/<[^>]+>/g, '').replace(/ Si sí, toca Deshacer\./, ' Si sí, bórralo en Movimientos.') } : {};
 }
 
 export async function guardarIngreso(fd: FormData) {
@@ -211,6 +220,118 @@ export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cue
   if (tipo === 'cuenta') await db.borrarCuenta(id);
   if (tipo === 'meta') await db.borrarMeta(id);
   if (tipo === 'transferencia') await db.borrarTransferencia(id);
+  refrescar();
+}
+
+/** Datos para "Tu año en Pilas". */
+export async function datosAnio(anio: number) {
+  await listo();
+  return db.resumenAnio(Math.max(2020, Math.min(2100, Math.round(Number(anio)) || new Date().getFullYear())));
+}
+
+// ---------------------------------------------------------------------------
+// Notificaciones de la app (push)
+
+export async function llavePush() {
+  await listo();
+  const { llavePublicaPush } = await import('@/lib/push');
+  return llavePublicaPush();
+}
+export async function activarPush(sub: { endpoint: string; keys: { p256dh: string; auth: string } }, nombre: string) {
+  await listo();
+  const { guardarSuscripcion, enviarPush } = await import('@/lib/push');
+  await guardarSuscripcion(sub, nombre || 'Este dispositivo', await origen());
+  await enviarPush({ titulo: 'Pilas', cuerpo: '¡Listo! Aquí te llegarán los recordatorios y las alertas.', etiqueta: 'bienvenida' });
+  refrescar();
+}
+export async function desactivarPush(endpoint: string) {
+  await listo();
+  const { quitarSuscripcion } = await import('@/lib/push');
+  await quitarSuscripcion(String(endpoint));
+}
+export async function dispositivosPush() {
+  await listo();
+  const { suscripciones } = await import('@/lib/push');
+  return (await suscripciones()).map((s) => ({ endpoint: s.endpoint, nombre: s.nombre, creada: s.creada }));
+}
+
+// ---------------------------------------------------------------------------
+// Huella / Face ID (passkeys)
+
+export async function opcionesNuevaLlave() {
+  await listo();
+  const { opcionesRegistro } = await import('@/lib/llaves');
+  const { COOKIE_RETO, retoFirmado } = await import('@/lib/sesion');
+  const { cookies } = await import('next/headers');
+  const op = await opcionesRegistro();
+  (await cookies()).set(COOKIE_RETO, await retoFirmado(op.challenge), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: 300 });
+  return op;
+}
+export async function guardarNuevaLlave(respuesta: unknown, nombre: string) {
+  await listo();
+  const { guardarRegistro } = await import('@/lib/llaves');
+  const { COOKIE_RETO, leerReto } = await import('@/lib/sesion');
+  const { cookies } = await import('next/headers');
+  const jar = await cookies();
+  const reto = await leerReto(jar.get(COOKIE_RETO)?.value);
+  jar.delete(COOKIE_RETO);
+  if (!reto) return { ok: false, error: 'Se venció el tiempo. Inténtalo otra vez.' };
+  try {
+    const ok = await guardarRegistro(respuesta as Parameters<typeof guardarRegistro>[0], reto, nombre);
+    if (ok) {
+      const chat = process.env.TELEGRAM_CHAT_ID;
+      if (chat) {
+        const { enviarMensaje, esc } = await import('@/lib/telegram');
+        await enviarMensaje(chat, `🔑 Activaste la entrada con huella/Face ID en <b>${esc(nombre || 'un dispositivo')}</b>.
+¿No fuiste tú? Quítala en Plan → Conexiones y escribe /cerrarsesiones.`).catch(() => {});
+      }
+    }
+    refrescar();
+    return ok ? { ok: true } : { ok: false, error: 'No se pudo verificar.' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo verificar.' };
+  }
+}
+export async function listaLlaves() {
+  await listo();
+  const { llaves } = await import('@/lib/llaves');
+  return llaves();
+}
+export async function quitarLlave(id: string) {
+  await listo();
+  const { borrarLlave } = await import('@/lib/llaves');
+  await borrarLlave(String(id));
+  refrescar();
+}
+
+// ---------------------------------------------------------------------------
+// Conexiones: registro automático desde el celular
+
+/** Dirección pública de la app (para armar el enlace que va en el Atajo / MacroDroid). */
+async function origen() {
+  const { headers } = await import('next/headers');
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/** Crea una llave para el celular. Se muestra una sola vez (en la base solo queda su huella). */
+export async function crearLlaveAuto(nombre: string) {
+  await listo();
+  const { aleatorio, huella } = await import('@/lib/sesion');
+  const llave = `pilas_${aleatorio(24)}`;
+  await db.crearToken(await huella(`api:${llave}`), (nombre || 'Mi celular').slice(0, 40));
+  refrescar();
+  return { llave, url: `${await origen()}/api/registro` };
+}
+export async function llavesAuto() {
+  await listo();
+  return { llaves: await db.tokens(), url: `${await origen()}/api/registro` };
+}
+export async function borrarLlaveAuto(id: number) {
+  await listo();
+  await db.borrarToken(Number(id));
   refrescar();
 }
 

@@ -9,6 +9,18 @@
 
 export const COOKIE_SESION = 'pilas_sesion';
 export const COOKIE_DESAFIO = 'pilas_desafio';
+export const COOKIE_RETO = 'pilas_reto';
+
+/** Guarda el reto de huella/Face ID en una cookie firmada que vence en 5 minutos. */
+export async function retoFirmado(reto: string): Promise<string> {
+  return firmar('reto', `${reto}.${Date.now() + 5 * 60_000}`);
+}
+export async function leerReto(valor: string | undefined | null): Promise<string | null> {
+  const c = await verificar('reto', valor);
+  if (!c) return null;
+  const i = c.lastIndexOf('.');
+  return Number(c.slice(i + 1)) > Date.now() ? c.slice(0, i) : null;
+}
 
 const enc = new TextEncoder();
 let llave: Promise<CryptoKey> | null = null;

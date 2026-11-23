@@ -8,7 +8,7 @@ import { confeti } from './Celebrar';
 import { IconoCat } from './IconoCat';
 import { colorCat, emojiCat, nombreMes, pesos } from './util';
 
-type Lamina = { id: string; fondo: string; eyebrow: string; titulo: React.ReactNode; texto?: React.ReactNode; extra?: React.ReactNode };
+export type Lamina = { id: string; fondo: string; eyebrow: string; titulo: React.ReactNode; texto?: React.ReactNode; extra?: React.ReactNode };
 const DURACION = 5500;
 
 /**
@@ -19,9 +19,6 @@ export function Historias({ mes, r, porDia, historial, gastos, metas, patrimonio
   mes: string; r: Resumen; porDia: number[]; historial: MesHistorial[]; gastos: Gasto[]; metas: Meta[]; patrimonio: PuntoPatrimonio[];
   cerrar: () => void;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const [i, setI] = useState(0);
-  const [pausa, setPausa] = useState(false);
   const nombre = nombreMes(Number(mes.slice(5)));
 
   const laminas = useMemo<Lamina[]>(() => {
@@ -115,6 +112,14 @@ export function Historias({ mes, r, porDia, historial, gastos, metas, patrimonio
     return l;
   }, [mes, nombre, r, porDia, historial, gastos, metas, patrimonio]);
 
+  return <ReproductorHistorias laminas={laminas} titulo={`Tu ${nombre} en Pilas`} cerrar={cerrar} />;
+}
+
+/** Reproduce láminas tipo historias: avanzan solas, se tocan a los lados y se pausan manteniendo el dedo. */
+export function ReproductorHistorias({ laminas, titulo, cerrar }: { laminas: Lamina[]; titulo: string; cerrar: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [i, setI] = useState(0);
+  const [pausa, setPausa] = useState(false);
   useEffect(() => {
     ref.current?.showModal();
   }, []);
@@ -138,7 +143,7 @@ export function Historias({ mes, r, porDia, historial, gastos, metas, patrimonio
     <dialog
       ref={ref}
       className="historias"
-      aria-label={`Tu ${nombre} en Pilas`}
+      aria-label={titulo}
       onClose={cerrar}
       onKeyDown={(e) => { if (e.key === 'ArrowRight') ir(1); if (e.key === 'ArrowLeft') ir(-1); }}
     >

@@ -1,6 +1,7 @@
 import { asegurarEsquema } from '@/lib/esquema';
 import { marcarSemana, registrarPatrimonio } from '@/lib/datos';
 import { enviarResumenSemanal } from '@/lib/semanal';
+import { enviarPush, sinHtml } from '@/lib/push';
 import { marcarEnviado, mensajeDelDia } from '@/lib/recordatorios';
 import { enviarMensaje } from '@/lib/telegram';
 
@@ -27,7 +28,10 @@ export async function GET(req: Request) {
   let semanal = false;
   if (chat && domingo) {
     const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
-    if (await marcarSemana(hoy)) semanal = await enviarResumenSemanal(chat);
+    if (await marcarSemana(hoy)) {
+      semanal = await enviarResumenSemanal(chat);
+      await enviarPush({ titulo: 'Tu semana en Pilas', cuerpo: 'Ya está tu resumen de la semana. Míralo en Telegram.', etiqueta: 'semana' });
+    }
   }
 
   const mensaje = await mensajeDelDia();
@@ -35,5 +39,6 @@ export async function GET(req: Request) {
   if (!(await marcarEnviado())) return Response.json({ enviado: false, motivo: 'ya se envió hoy' });
 
   await enviarMensaje(chat, mensaje);
+  await enviarPush({ titulo: 'Pilas · tu día', cuerpo: sinHtml(mensaje), url: '/', etiqueta: 'dia' });
   return Response.json({ enviado: true, semanal });
 }

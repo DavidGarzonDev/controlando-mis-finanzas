@@ -56,7 +56,7 @@ export async function bloqueo(ip: string): Promise<Bloqueo> {
 }
 
 /** Guarda un intento. Si es fallido y se pasa del límite, bloquea y te avisa. Devuelve los intentos que le quedan a esa IP. */
-export async function registrarIntento(ip: string, tipo: 'clave' | 'codigo', exito: boolean, agente: string): Promise<number> {
+export async function registrarIntento(ip: string, tipo: 'clave' | 'codigo' | 'llave', exito: boolean, agente: string): Promise<number> {
   await sql()`INSERT INTO intentos_acceso (ip, tipo, exito) VALUES (${ip}, ${tipo}, ${exito})`;
   if (exito) return LIMITE_IP;
 
@@ -83,7 +83,7 @@ export async function registrarIntento(ip: string, tipo: 'clave' | 'codigo', exi
     await sql().query(`INSERT INTO bloqueos (ip, hasta, motivo) VALUES ($1, now() + interval '${VENTANA_IP_MIN} minutes', $2)`, [ip, tipo]);
     await avisar(
       `🔒 <b>Bloqueé una conexión por ${VENTANA_IP_MIN} minutos</b> después de ${fallosIp} intentos fallidos ` +
-        `(${tipo === 'clave' ? 'clave equivocada' : 'código equivocado'}).\nIP: <code>${esc(ip)}</code>\nDispositivo: ${esc(dispositivo(agente))}\n\n` +
+        `(${tipo === 'clave' ? 'clave equivocada' : tipo === 'llave' ? 'huella o Face ID que no coincide' : 'código equivocado'}).\nIP: <code>${esc(ip)}</code>\nDispositivo: ${esc(dispositivo(agente))}\n\n` +
         `Si eras tú, escribe /desbloquear. Si no, tu clave sigue a salvo: sin el código de Telegram no pueden entrar.`,
     );
     return 0;

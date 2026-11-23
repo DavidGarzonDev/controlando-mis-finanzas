@@ -110,6 +110,20 @@ const SENTENCIAS = [
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(), antes INTEGER NOT NULL, despues INTEGER NOT NULL)`,
   // Desde cuándo se anotan los cambios de saldo a mano (antes de eso el saldo histórico no se puede reconstruir)
   `INSERT INTO migraciones (id) VALUES ('registro_ajustes') ON CONFLICT DO NOTHING`,
+  // Ajustes internos (llaves de notificaciones) y dispositivos con notificaciones activadas
+  `CREATE TABLE IF NOT EXISTS ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS suscripciones_push (
+    endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, nombre TEXT NOT NULL,
+    creada TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  // Huella / Face ID (passkeys): solo la llave pública de cada dispositivo
+  `CREATE TABLE IF NOT EXISTS llaves_acceso (
+    id TEXT PRIMARY KEY, llave_publica TEXT NOT NULL, contador BIGINT NOT NULL DEFAULT 0, transportes TEXT,
+    nombre TEXT NOT NULL, creada TIMESTAMPTZ NOT NULL DEFAULT now(), ultimo_uso TIMESTAMPTZ)`,
+  // Registro automático: tokens para el celular (Atajos / MacroDroid) y notificaciones ya vistas
+  `CREATE TABLE IF NOT EXISTS tokens_api (
+    id SERIAL PRIMARY KEY, huella TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL,
+    creado TIMESTAMPTZ NOT NULL DEFAULT now(), ultimo_uso TIMESTAMPTZ)`,
+  `CREATE TABLE IF NOT EXISTS notificaciones_vistas (huella TEXT PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now())`,
   // Categorías que crea el usuario, con su emoji y color
   `CREATE TABLE IF NOT EXISTS categorias_propias (
     nombre TEXT PRIMARY KEY, emoji TEXT, color TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now())`,

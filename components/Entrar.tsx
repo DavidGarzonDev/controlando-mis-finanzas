@@ -1,13 +1,14 @@
 'use client';
 
 import { useActionState, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, MessageCircle, ShieldCheck } from 'lucide-react';
-import { conClave, conCodigo, otraVez, type Estado } from '@/app/entrar/acciones';
+import { ArrowRight, Eye, EyeOff, Fingerprint, KeyRound, LockKeyhole, MessageCircle, ShieldCheck } from 'lucide-react';
+import { startAuthentication } from '@simplewebauthn/browser';
+import { conClave, conCodigo, conHuella, opcionesHuella, otraVez, type Estado } from '@/app/entrar/acciones';
 
 const INICIAL: Estado = { paso: 'clave' };
 
 /** Pantalla de entrada: clave → código de 6 dígitos que llega a tu Telegram. */
-export default function Entrar() {
+export default function Entrar({ conHuella = false }: { conHuella?: boolean }) {
   const [estadoClave, enviarClave, cargandoClave] = useActionState(conClave, INICIAL);
   const [estadoCodigo, enviarCodigo, cargandoCodigo] = useActionState(conCodigo, { paso: 'codigo' } as Estado);
   // Paso visible y mensaje de error; el código vuelve al paso de la clave si venció, se agotó o hubo bloqueo.
@@ -64,6 +65,8 @@ export default function Entrar() {
               : 'Te mandé un código de 6 números. Escríbelo aquí para entrar.'}
           </p>
         </div>
+
+        {paso === 'clave' && conHuella && <BotonHuella />}
 
         {paso === 'clave' ? (
           <FormClave accion={enviarClave} cargando={cargandoClave} error={error} bloqueadoHasta={bloqueadoHasta} />
@@ -185,5 +188,38 @@ function FormCodigo({ accion, cargando, error, intento, envio, volver }: {
       </button>
       <button type="button" className="entrar-enlace" onClick={volver}>¿No te llegó? Pedir otro código</button>
     </form>
+  );
+}
+
+/** Entrar con la huella o Face ID del dispositivo (passkey). Si falla, queda la clave + código. */
+function BotonHuella() {
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+  async function entrar() {
+    setError('');
+    setCargando(true);
+    try {
+      const r = await opcionesHuella();
+      if (r.error || !r.opciones) throw new Error(r.error ?? 'No se pudo empezar.');
+      const firma = await startAuthentication({ optionsJSON: r.opciones as Parameters<typeof startAuthentication>[0]['optionsJSON'] });
+      const v = await conHuella(firma);
+      if (v?.error) throw new Error(v.error);
+    } catch (e) {
+      // Cancelar el diálogo del celular no es un error que valga la pena mostrar con alarma
+      const m = e instanceof Error ? e.message : '';
+      if (/NEXT_REDIRECT/.test(m)) return;
+      setError(/abort|cancel|NotAllowed/i.test(m) ? 'Cancelaste la huella. Puedes intentarlo otra vez o usar tu clave.' : m || 'No se pudo entrar con la huella.');
+      setCargando(false);
+    }
+  }
+  return (
+    <div className="entrar-huella">
+      <button type="button" className="entrar-btn huella" onClick={entrar} disabled={cargando}>
+        {cargando ? <span className="girando" aria-hidden /> : <Fingerprint size={20} aria-hidden />}
+        {cargando ? 'Verificando…' : 'Entrar con huella o Face ID'}
+      </button>
+      {error && <p className="entrar-error" role="alert">{error}</p>}
+      <p className="entrar-o"><span>o con tu clave</span></p>
+    </div>
   );
 }

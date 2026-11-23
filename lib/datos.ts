@@ -129,7 +129,7 @@ async function moverCuenta(cuentaId: number | null | undefined, delta: number) {
 // ---------- Gastos ----------
 
 export async function insertarGasto(g: {
-  concepto: string; monto: number; categoria: string; origen: 'telegram' | 'web'; texto?: string; cuentaId?: number | null;
+  concepto: string; monto: number; categoria: string; origen: 'telegram' | 'web' | 'auto'; texto?: string; cuentaId?: number | null;
 }) {
   const rows = await sql()`
     INSERT INTO gastos (concepto, monto, categoria, origen, texto_original, cuenta_id)
@@ -695,6 +695,87 @@ export async function palabrasAprendidas(): Promise<Record<string, Categoria>> {
   const out: Record<string, Categoria> = {};
   for (const r of rows) if (esCategoria(String(r.categoria), propias)) out[String(r.palabra)] = String(r.categoria);
   return out;
+}
+
+// ---------- Tu año en Pilas ----------
+
+export type Anio = {
+  anio: number; gastos: number; ingresos: number; ahorro: number; movimientos: number; diasConGasto: number;
+  porMes: { mes: number; gastos: number; ingresos: number }[];
+  categorias: { categoria: string; total: number }[];
+  repetidos: { concepto: string; veces: number; total: number }[];
+  diaMasCaro: { fecha: string; total: number } | null;
+  deudaInicio: number | null; deudaFin: number | null;
+};
+
+export async function resumenAnio(anio: number): Promise<Anio> {
+  const dia = `(fecha AT TIME ZONE '${ZONA}')`;
+  const filtro = `EXTRACT(YEAR FROM ${dia}) = $1`;
+  const [[t], meses, cats, reps, [caro], deu] = await Promise.all([
+    sql().query(`SELECT
+        (SELECT COALESCE(SUM(monto), 0) FROM gastos WHERE ${filtro}) AS gastos,
+        (SELECT COUNT(*) FROM gastos WHERE ${filtro}) AS movimientos,
+        (SELECT COUNT(DISTINCT ${dia}::date) FROM gastos WHERE ${filtro}) AS dias,
+        (SELECT COALESCE(SUM(monto), 0) FROM ingresos WHERE ${filtro}) AS ingresos,
+        (SELECT COALESCE(SUM(monto), 0) FROM aportes_meta WHERE ${filtro}) AS ahorro`, [anio]),
+    sql().query(`SELECT m AS mes,
+        COALESCE((SELECT SUM(monto) FROM gastos WHERE ${filtro} AND EXTRACT(MONTH FROM ${dia}) = m), 0) AS gastos,
+        COALESCE((SELECT SUM(monto) FROM ingresos WHERE ${filtro} AND EXTRACT(MONTH FROM ${dia}) = m), 0) AS ingresos
+      FROM generate_series(1, 12) AS m`, [anio]),
+    sql().query(`SELECT categoria, SUM(monto) AS total FROM gastos WHERE ${filtro} AND categoria <> 'Ajuste' GROUP BY 1 ORDER BY 2 DESC LIMIT 6`, [anio]),
+    sql().query(`SELECT initcap(lower(trim(concepto))) AS concepto, COUNT(*) AS veces, SUM(monto) AS total FROM gastos
+      WHERE ${filtro} GROUP BY 1 HAVING COUNT(*) >= 2 ORDER BY 2 DESC, 3 DESC LIMIT 5`, [anio]),
+    sql().query(`SELECT to_char(${dia}::date, 'YYYY-MM-DD') AS fecha, SUM(monto) AS total FROM gastos WHERE ${filtro}
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 1`, [anio]),
+    sql().query(`SELECT deudas FROM patrimonio_diario WHERE EXTRACT(YEAR FROM fecha) = $1 ORDER BY fecha`, [anio]),
+  ]);
+  return {
+    anio, gastos: n(t.gastos), ingresos: n(t.ingresos), ahorro: n(t.ahorro), movimientos: n(t.movimientos), diasConGasto: n(t.dias),
+    porMes: meses.map((m) => ({ mes: n(m.mes), gastos: n(m.gastos), ingresos: n(m.ingresos) })),
+    categorias: cats.map((c) => ({ categoria: String(c.categoria), total: n(c.total) })),
+    repetidos: reps.map((r) => ({ concepto: String(r.concepto), veces: n(r.veces), total: n(r.total) })),
+    diaMasCaro: caro ? { fecha: String(caro.fecha), total: n(caro.total) } : null,
+    deudaInicio: deu.length ? n(deu[0].deudas) : null,
+    deudaFin: deu.length ? n(deu[deu.length - 1].deudas) : null,
+  };
+}
+
+// ---------- Registro automático ----------
+
+/** Ya llegó esta misma notificación hace poco? (el banco a veces la manda por push, SMS y correo). Si no, la anota. */
+export async function notificacionNueva(huella: string): Promise<boolean> {
+  await sql()`DELETE FROM notificaciones_vistas WHERE fecha < now() - interval '3 days'`;
+  const rows = await sql()`INSERT INTO notificaciones_vistas (huella) VALUES (${huella}) ON CONFLICT DO NOTHING RETURNING huella`;
+  return rows.length > 0;
+}
+export async function notificacionesUltimaHora(): Promise<number> {
+  const [r] = await sql()`SELECT COUNT(*) AS n FROM notificaciones_vistas WHERE fecha > now() - interval '1 hour'`;
+  return n(r?.n);
+}
+/** Un gasto del mismo monto en los últimos minutos (quizá ya lo registraste a mano). */
+export async function gastoReciente(monto: number, minutos = 20): Promise<Gasto | null> {
+  const rows = await sql().query(
+    `SELECT id, fecha, concepto, monto, categoria, origen, cuenta_id FROM gastos
+     WHERE monto = $1 AND fecha > now() - ($2 || ' minutes')::interval ORDER BY fecha DESC LIMIT 1`,
+    [monto, String(minutos)],
+  );
+  return rows[0] ? filaGasto(rows[0]) : null;
+}
+
+export type TokenApi = { id: number; nombre: string; creado: string; ultimoUso: string | null };
+export async function crearToken(huella: string, nombre: string) {
+  await sql()`INSERT INTO tokens_api (huella, nombre) VALUES (${huella}, ${nombre.slice(0, 40)})`;
+}
+export async function tokenValido(huella: string): Promise<boolean> {
+  const rows = await sql()`UPDATE tokens_api SET ultimo_uso = now() WHERE huella = ${huella} RETURNING id`;
+  return rows.length > 0;
+}
+export async function tokens(): Promise<TokenApi[]> {
+  const rows = await sql()`SELECT id, nombre, creado, ultimo_uso FROM tokens_api ORDER BY creado DESC`;
+  return rows.map((r) => ({ id: n(r.id), nombre: String(r.nombre), creado: String(r.creado), ultimoUso: r.ultimo_uso ? String(r.ultimo_uso) : null }));
+}
+export async function borrarToken(id: number) {
+  await sql()`DELETE FROM tokens_api WHERE id = ${id}`;
 }
 
 // ---------- Semana ----------

@@ -2691,3 +2691,61 @@ html, body { overflow-x: clip; }
   vertical-align: 1px;
 }
 .cuentas-sel.falta legend small { color: var(--ambar); font-weight: 700; }
+
+/* Entrar con huella / Face ID */
+.entrar-huella { display: grid; gap: 12px; margin-bottom: 6px; }
+.entrar-btn.huella { background: rgb(255 255 255 / 0.08); border: 1px solid rgb(255 255 255 / 0.16); box-shadow: none; }
+.entrar-btn.huella:hover:not(:disabled) { background: rgb(255 255 255 / 0.12); }
+.entrar-o { display: flex; align-items: center; gap: 12px; color: var(--e-tinta-2); font-size: 0.8rem; }
+.entrar-o::before, .entrar-o::after { content: ''; flex: 1; height: 1px; background: var(--e-linea); }
+
+.aviso { max-width: min(520px, calc(100vw - 32px)); text-wrap: pretty; }
+
+/* Tu año en Pilas */
+.banner-anio {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 16px; padding: 14px 16px;
+  border: 0; border-radius: var(--radio); cursor: pointer; text-align: left; color: #fff; font: 600 0.95rem var(--fuente);
+  background: radial-gradient(120% 120% at 100% 0%, #c48bff, transparent 55%), linear-gradient(135deg, #1d36c4, #5b3be0);
+  box-shadow: 0 14px 30px -16px rgb(80 70 230 / 0.8);
+}
+.banner-anio span { flex: 1; }
+.lamina-meses { display: flex; align-items: flex-end; gap: 6px; height: 120px; margin-top: 10px; animation: subir 0.6s 0.45s var(--curva) both; }
+.lamina-meses span { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.lamina-meses i { display: block; width: 100%; border-radius: 6px 6px 3px 3px; background: rgb(255 255 255 / 0.85); animation: crecer-alto 0.9s 0.5s var(--curva) both; transform-origin: bottom; }
+.lamina-meses small { font-size: 0.7rem; opacity: 0.75; }
+@keyframes crecer-alto { from { transform: scaleY(0); } }
+.historias-cargando { position: fixed; inset: 0; z-index: 90; display: grid; place-content: center; gap: 12px; justify-items: center; background: rgb(4 6 14 / 0.82); color: #fff; font-weight: 650; }
+
+/* Conexiones y seguridad (Plan) */
+.conexiones-grid { display: grid; gap: 16px; }
+@media (min-width: 1100px) { .conexiones-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conexiones-grid > :first-child { grid-row: span 2; } }
+.conexion {
+  display: grid; gap: 14px; align-content: start; padding: 18px; background: var(--papel);
+  border: 1px solid var(--borde-suave); border-radius: var(--radio); box-shadow: var(--sombra);
+}
+.conexion-cab { display: flex; gap: 12px; align-items: flex-start; }
+.conexion-cab h3 { font-size: 1rem; font-weight: 750; }
+.conexion-cab p { color: var(--tinta-2); font-size: 0.88rem; margin-top: 2px; }
+.conexion-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; flex: none; }
+.conexion-ico.azul { background: var(--azul-suave); color: var(--azul); }
+.conexion-ico.violeta { background: var(--violeta-suave); color: var(--violeta); }
+.conexion-ico.ambar { background: var(--ambar-suave); color: var(--ambar); }
+.conexion .btn { justify-self: start; }
+.conexion .segmento.chico button {
+  padding: 6px 12px; font: 650 0.85rem var(--fuente); border: 0; border-radius: 9px; background: none; color: var(--tinta-2); cursor: pointer;
+}
+.conexion .segmento.chico button.on { background: var(--papel); color: var(--tinta); box-shadow: 0 1px 3px rgb(18 24 38 / 0.12); }
+.guia { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 0.88rem; color: var(--tinta-2); }
+.guia code { white-space: normal; word-break: break-all; }
+.copiar { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--papel-2); }
+.copiar small { grid-column: 1 / -1; color: var(--tinta-3); font-size: 0.74rem; font-weight: 650; }
+.copiar code { white-space: normal; word-break: break-all; background: none; border: 0; padding: 0; font-size: 0.82rem; }
+.conexion-nueva { display: grid; gap: 8px; }
+.conexion-lista { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--linea); }
+.conexion-lista li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--linea); }
+.conexion-lista li span { display: grid; }
+.conexion-lista small { color: var(--tinta-3); font-size: 0.76rem; }
+.probar summary { cursor: pointer; font-weight: 650; color: var(--azul); font-size: 0.88rem; }
+.probar { display: grid; gap: 8px; }
+.probar[open] { gap: 10px; }
+.probar textarea { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--linea); background: var(--papel-2); color: var(--tinta); font: 500 15px var(--fuente); resize: vertical; }

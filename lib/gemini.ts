@@ -120,3 +120,33 @@ export async function leerMedio(base64: string, mime: string, tipo: 'audio' | 'i
     return { ok: false, motivo: 'error' };
   }
 }
+
+/** Pregunta libre a Gemini (texto en, texto out). La usa "Pregúntale a Pilas". */
+export async function preguntarIA(sistema: string, pregunta: string): Promise<{ ok: true; texto: string } | { ok: false; motivo: 'sin_clave' | 'limite' | 'error' }> {
+  const clave = process.env.GEMINI_API_KEY;
+  if (!clave) return { ok: false, motivo: 'sin_clave' };
+  const modelo = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sistema }] },
+        contents: [{ role: 'user', parts: [{ text: pregunta }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 700 },
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (res.status === 429) return { ok: false, motivo: 'limite' };
+    if (!res.ok) {
+      console.error('Gemini respondió', res.status, await res.text());
+      return { ok: false, motivo: 'error' };
+    }
+    const data = await res.json();
+    const texto: string = (data?.candidates?.[0]?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim();
+    return texto ? { ok: true, texto } : { ok: false, motivo: 'error' };
+  } catch (e) {
+    console.error('Error llamando a Gemini', e);
+    return { ok: false, motivo: 'error' };
+  }
+}

@@ -24,6 +24,7 @@ import { Modal, type Editor } from './Modal';
 import { Paleta } from './Paleta';
 import { confeti } from './Celebrar';
 import { Historias } from './Historias';
+import { AnioEnPilas } from './AnioEnPilas';
 import { salir } from '@/app/entrar/acciones';
 import { IconoCat } from './IconoCat';
 import type { CategoriaPropia } from '@/lib/categorias';
@@ -47,6 +48,9 @@ const TABS: { id: Tab; label: string; Icono: typeof LayoutDashboard }[] = [
   { id: 'plan', label: 'Plan', Icono: ClipboardList },
 ];
 
+/** Los avisos largos (alertas) duran más en pantalla para alcanzar a leerlos. */
+const duracionAviso = (t: string) => Math.min(9000, Math.max(2600, t.length * 60));
+
 export default function App(p: Props) {
   registrarCategorias(p.categorias);
   const [tab, setTab] = useState<Tab>('resumen');
@@ -54,6 +58,7 @@ export default function App(p: Props) {
   const [aviso, setAviso] = useState<{ texto: string; n: number } | null>(null);
   const [paleta, setPaleta] = useState(false);
   const [historias, setHistorias] = useState(false);
+  const [anio, setAnio] = useState<number | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
 
   // Ctrl+K (o ⌘K) abre la paleta rápida desde cualquier parte.
@@ -127,7 +132,7 @@ export default function App(p: Props) {
   const avisar = useCallback((texto: string) => setAviso({ texto, n: Date.now() }), []);
   useEffect(() => {
     if (!aviso) return;
-    const t = setTimeout(() => setAviso(null), 2600);
+    const t = setTimeout(() => setAviso(null), duracionAviso(aviso.texto));
     return () => clearTimeout(t);
   }, [aviso]);
 
@@ -237,6 +242,12 @@ export default function App(p: Props) {
         )}
 
         <main id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} className="panel" key={`${tab}-${p.mes}`}>
+          {tab === 'resumen' && (p.hoy.mes === 12 || p.hoy.mes === 1) && p.resumen.esActual && (
+            <button className="banner-anio" onClick={() => setAnio(p.hoy.mes === 1 ? p.hoy.anio - 1 : p.hoy.anio)}>
+              <Sparkles size={18} aria-hidden /> <span><b>Tu {p.hoy.mes === 1 ? p.hoy.anio - 1 : p.hoy.anio} en Pilas</b> · mira cómo te fue en el año</span>
+              <ChevronRight size={18} aria-hidden />
+            </button>
+          )}
           {tab === 'resumen' && <Resumen {...p} abrir={setEditor} ir={ir} avisar={avisar} verHistorias={() => setHistorias(true)} />}
           {tab === 'movimientos' && (
             <Movimientos gastos={p.gastos} ingresos={p.ingresos} transferencias={p.transferencias} cuentas={p.cuentas} r={p.resumen} mes={p.mes} hoyClave={hoyClave} abrir={setEditor} />
@@ -252,11 +263,12 @@ export default function App(p: Props) {
       {historias && (
         <Historias mes={p.mes} r={p.resumen} porDia={p.porDia} historial={p.historial} gastos={p.gastos} metas={p.metas} patrimonio={p.patrimonio} cerrar={() => setHistorias(false)} />
       )}
-      <Paleta abierta={paleta} cerrar={() => setPaleta(false)} ir={ir} abrir={setEditor} mes={p.mes} />
+      {anio && <AnioEnPilas anio={anio} cerrar={() => setAnio(null)} />}
+      <Paleta abierta={paleta} verAnio={() => setAnio(p.hoy.mes === 1 ? p.hoy.anio - 1 : p.hoy.anio)} cerrar={() => setPaleta(false)} ir={ir} abrir={setEditor} mes={p.mes} />
 
       <div className="aviso-zona" aria-live="polite">
         {aviso && (
-          <p className="aviso" key={aviso.n}>
+          <p className="aviso" key={aviso.n} style={{ animationDuration: `${duracionAviso(aviso.texto)}ms` }}>
             <Check size={18} aria-hidden /> {aviso.texto}
           </p>
         )}

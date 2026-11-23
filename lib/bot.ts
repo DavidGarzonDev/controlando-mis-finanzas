@@ -1,5 +1,8 @@
 import { CATEGORIAS, conEmoji, normalizarCategoria, sinTildes } from './categorias';
 import { barra, tarjetaGasto, tarjetaIngreso, textoCategorias } from './mensajes';
+import { pareceNotificacion } from './notificaciones';
+import { alertasGasto } from './alertas';
+import { esPregunta } from './preguntas';
 import { extraerMonto, interpretar } from './parser';
 import { interpretarConIA } from './gemini';
 import { generarConsejos, simularPago, tasaMensual } from './consejos';
@@ -69,7 +72,7 @@ Debajo de cada gasto tienes los botones <b>Categoría</b>, <b>Cuenta</b> y <b>De
 /cerrarsesiones — saca a todos los dispositivos
 /desbloquear — quita el bloqueo por intentos fallidos
 
-/semana — resumen de los últimos 7 días con imagen (llega solo cada domingo)
+<b>Pregúntale a Pilas</b>\n• <code>¿cuánto gasté en gasolina este mes?</code>\n• <code>¿en qué se me fue la plata esta quincena?</code>\n\n/semana — resumen de los últimos 7 días con imagen (llega solo cada domingo)
 /menu — muestra los botones de abajo (Hoy, Resumen, Por pagar…)`;
 
 /** Qué tan bien se parece `nombre` a lo que escribió el usuario: exacto 3, empieza una palabra 2, contiene 1. */
@@ -99,6 +102,15 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
   const [comando, ...resto] = texto.split(/\s+/);
   const args = resto.join(' ');
   const cmd = comando.toLowerCase().replace(/@\w+$/, ''); // quita @nombre_bot en grupos
+
+  // Pegaste o reenviaste la notificación del banco: se registra igual que si llegara del celular
+  if (!texto.startsWith('/') && pareceNotificacion(texto)) {
+    const { procesarNotificacion } = await import('./automatico');
+    const r = await procesarNotificacion(texto);
+    if (r.ok) return r.respuesta;
+    if (r.respuesta) return r.respuesta;
+    if (r.motivo === 'repetida') return 'Esa notificación ya la había registrado 👌';
+  }
 
   // "movimientos del efectivo", "historial de nequi", "qué pasó con el efectivo"
   const pideHistorial = texto.match(/^(?:movimientos|historial|qu[eé] pas[oó] con)\s+(?:de\s+|del\s+|con\s+)?(?:la\s+|el\s+|mi\s+)?(.+)$/i);
@@ -160,6 +172,10 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
     case '/categorias':
     case '/categorías':
       return comandoCategoria(args);
+    case '/pregunta':
+    case '/preguntar':
+      if (!args) return 'Pregúntame lo que quieras de tu plata, por ejemplo: <code>¿cuánto gasté en gasolina este mes?</code>';
+      return (await import('./preguntas')).responderPregunta(args);
     case '/semana':
       return { texto: 'Te mando el resumen de la semana 📊', botones: [], semana: true };
     case '/menu':
@@ -244,6 +260,12 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
     return marcarPagado(texto.replace(/^pagu[eé]\s+(el|la|lo de|los|las)?\s*/i, ''));
   }
 
+  // "¿cuánto gasté en gasolina en octubre?" → Pregúntale a Pilas
+  if (esPregunta(texto)) {
+    const { responderPregunta } = await import('./preguntas');
+    return responderPregunta(texto);
+  }
+
   return registrar(texto);
 }
 
@@ -307,6 +329,8 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
   const idGasto = await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoOriginal, cuentaId });
   if (otroMonto) await db.guardarDuda('gasto', idGasto, otroMonto);
   const extra: string[] = [];
+  const nuevo = await db.gastoPorId(idGasto);
+  if (nuevo) extra.push(...(await alertasGasto(nuevo)));
   if (cuenta?.c.banco === 'efectivo' && cuenta.c.saldo === 0) {
     extra.push('Lo anoté en tu <b>Efectivo</b>. ¿Cuánto tienes en la billetera? Dímelo así: <code>/saldo efectivo 100000</code>');
   }

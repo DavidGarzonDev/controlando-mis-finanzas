@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ClipboardList, CornerDownLeft, Download, Gauge, LayoutDashboard,
-  LogOut, MessageSquareText, PiggyBank, Plus, Search, Target, WalletCards,
+  LogOut, MessageSquareText, PiggyBank, Sparkles, Plus, Search, Target, WalletCards,
 } from 'lucide-react';
 import { registrarTexto, tocarBoton } from '@/app/actions';
 import { salir } from '@/app/entrar/acciones';
@@ -16,8 +16,8 @@ type Opcion = { id: string; titulo: string; detalle?: string; Icono: typeof Sear
  * Paleta rápida (Ctrl+K o el buscador): escribe como en el bot ("almuerzo 15 mil con nu")
  * o salta a cualquier sección o acción.
  */
-export function Paleta({ abierta, cerrar, ir, abrir, mes }: {
-  abierta: boolean; cerrar: () => void; ir: (t: Tab) => void; abrir: (e: Editor) => void; mes: string;
+export function Paleta({ abierta, cerrar, ir, abrir, mes, verAnio }: {
+  abierta: boolean; cerrar: () => void; ir: (t: Tab) => void; abrir: (e: Editor) => void; mes: string; verAnio: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const entrada = useRef<HTMLInputElement>(null);
@@ -55,6 +55,7 @@ export function Paleta({ abierta, cerrar, ir, abrir, mes }: {
       { id: 'tarjeta', titulo: 'Agregar tarjeta de crédito', Icono: WalletCards, hacer: () => abrir({ tipo: 'deuda', nuevoTipo: 'tarjeta' }) },
       { id: 'cuenta', titulo: 'Agregar cuenta o efectivo', Icono: PiggyBank, hacer: () => abrir({ tipo: 'cuenta' }) },
       { id: 'excel', titulo: 'Descargar movimientos en Excel', Icono: Download, hacer: () => { window.location.href = `/api/exportar?desde=${mes}`; } },
+      { id: 'anio', titulo: 'Tu año en Pilas', detalle: 'El resumen del año en historias', Icono: Sparkles, hacer: verAnio },
       { id: 'salir', titulo: 'Cerrar sesión', detalle: 'Para volver a entrar necesitas clave y código', Icono: LogOut, hacer: () => { void salir(); } },
     ];
     const t = q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

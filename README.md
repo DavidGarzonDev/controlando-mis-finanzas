@@ -153,6 +153,17 @@ Las compras con tarjeta **no** se restan de tu plata del mes: esa plata sale cua
 
 Abre `https://TU-APP.vercel.app`: escribe tu `DASHBOARD_PASSWORD` y luego el **código de 6 dígitos** que te llega al Telegram (vence en 5 minutos).
 
+**Conexiones (Plan → Conexiones y seguridad)**
+- **Registro automático:** crea una llave y configura tu celular para que mande las notificaciones del banco a `POST /api/registro` (con `Authorization: Bearer <llave>`). Android: MacroDroid o Tasker (disparador "notificación recibida"). iPhone: Atajos con los SMS del banco o con Apple Pay. Sin apps: pega la notificación en el chat del bot. Pilas reconoce Nequi, Bancolombia, Nu, Daviplata, Davivienda, AV Villas…, elige la cuenta por los últimos 4 dígitos o el banco, manda las compras con tarjeta de crédito a la tarjeta, y no registra dos veces lo mismo.
+- **Huella o Face ID (passkeys):** actívalo en cada dispositivo; la clave + código de Telegram quedan de respaldo.
+- **Notificaciones de la app:** recordatorio diario, resumen del domingo y alertas. Las llaves se crean solas (no hay que configurar nada). En iPhone, con la app instalada en la pantalla de inicio.
+
+**Alertas inteligentes:** al registrar un gasto, Pilas avisa si se parece a uno de hace pocos minutos (¿duplicado?), si es mucho más alto de lo normal en esa categoría, o si una suscripción subió de precio.
+
+**Pregúntale a Pilas:** escríbele al bot (o en la paleta Ctrl+K) preguntas como *¿cuánto gasté en gasolina este mes?* o *¿en qué se me fue la plata esta quincena?* y responde con tus cifras (usa Gemini).
+
+**Tu año en Pilas:** el resumen del año en historias (en diciembre y enero aparece en el Resumen; siempre desde la paleta Ctrl+K).
+
 **Seguridad del acceso**
 - Clave + código por Telegram: aunque alguien sepa tu clave, sin tu Telegram no entra.
 - 5 intentos fallidos (clave o código) desde una conexión → bloqueada 15 minutos. 15 fallidos en una hora desde cualquier lado → nadie entra durante 1 hora.
