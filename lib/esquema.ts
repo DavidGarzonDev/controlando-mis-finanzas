@@ -122,6 +122,15 @@ const SENTENCIAS = [
   // Notificaciones del banco que pegas en el bot (para no registrar dos veces la misma)
   `DROP TABLE IF EXISTS tokens_api`,
   `CREATE TABLE IF NOT EXISTS notificaciones_vistas (huella TEXT PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  // Préstamos a personas: la plata sale de tu cuenta pero no es gasto; queda como "te deben"
+  `CREATE TABLE IF NOT EXISTS prestamos (
+    id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(), persona TEXT NOT NULL,
+    monto INTEGER NOT NULL CHECK (monto > 0), pendiente INTEGER NOT NULL CHECK (pendiente >= 0),
+    cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL, nota TEXT)`,
+  `CREATE TABLE IF NOT EXISTS pagos_prestamo (
+    id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
+    prestamo_id INTEGER NOT NULL REFERENCES prestamos(id) ON DELETE CASCADE,
+    monto INTEGER NOT NULL CHECK (monto > 0), cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL)`,
   // Categorías que crea el usuario, con su emoji y color
   `CREATE TABLE IF NOT EXISTS categorias_propias (
     nombre TEXT PRIMARY KEY, emoji TEXT, color TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now())`,

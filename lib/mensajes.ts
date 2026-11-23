@@ -120,6 +120,10 @@ export async function tarjetaGasto(id: number, o: { extra?: string[]; abierto?: 
   if (cuenta && cuentas.length >= 2) acciones.push({ texto: 'Cuenta', dato: `a:g:${id}` });
   acciones.push({ texto: 'Deshacer', dato: `d:g:${id}` });
   botones.push(acciones);
+  // Plata que le diste a alguien: quizá te la van a devolver
+  if (/env[ií]o a|prest|le di a|le mand|a mi (novia|novio|mam[aá]|pap[aá]|herman|amig|abuel|t[ií][oa]|prim)/i.test(g.concepto)) {
+    botones.push([{ texto: 'Es préstamo (me lo devuelven)', dato: `ep:${id}` }]);
+  }
   return { texto: lineas.join('\n'), botones };
 }
 

@@ -6,9 +6,10 @@ import { Banknote, X } from 'lucide-react';
 import {
   aportarMeta, borrar, marcarCuota, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, guardarMeta, guardarTopes,
   movimientosDeCuenta, registrarAbono, registrarCompra, transferir,
+  cobrarPrestamoAccion, convertirGastoAccion, crearPrestamoAccion,
 } from '@/app/actions';
 import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
-import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, Meta, Resumen, TipoCredito, Transferencia } from '@/lib/datos';
+import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, Meta, Prestamo, Resumen, TipoCredito, Transferencia } from '@/lib/datos';
 import { colorCat, pesos, todasCategorias } from './util';
 import { IconoCat } from './IconoCat';
 import { RegistroRapido } from './Registro';
@@ -27,7 +28,9 @@ export type Editor =
   | { tipo: 'meta'; item?: Meta }
   | { tipo: 'aporte'; item: Meta }
   | { tipo: 'transferir'; modo?: 'transferir' | 'retiro' | 'consignacion'; desde?: number }
-  | { tipo: 'verTransferencia'; item: Transferencia; de: string; a: string };
+  | { tipo: 'verTransferencia'; item: Transferencia; de: string; a: string }
+  | { tipo: 'prestamo' }
+  | { tipo: 'cobro'; item: Prestamo };
 
 type Modo = 'gasto' | 'ingreso' | 'ajuste';
 
@@ -48,7 +51,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
 
   const tipo = editor.tipo === 'nuevo' ? modo : editor.tipo;
   const item = 'item' in editor ? (editor.item as (Gasto & Ingreso & Deuda & Fijo & Cuenta & Meta) | undefined) : undefined;
-  const esEdicion = ['gasto', 'ingreso', 'deuda', 'fijo', 'cuenta', 'meta', 'verTransferencia'].includes(editor.tipo) && !!item?.id;
+  const esEdicion = ['gasto', 'ingreso', 'deuda', 'fijo', 'cuenta', 'meta', 'verTransferencia', 'cobro'].includes(editor.tipo) && !!item?.id;
   const [tipoCredito, setTipoCredito] = useState<TipoCredito>(item?.tipo ?? (editor.tipo === 'deuda' ? editor.nuevoTipo : undefined) ?? 'tarjeta');
 
   const titulo = {
@@ -65,10 +68,12 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
     aporte: item?.nombre ?? 'Aportar',
     transferir: editor.tipo === 'transferir' && editor.modo === 'retiro' ? 'Retirar a efectivo' : editor.tipo === 'transferir' && editor.modo === 'consignacion' ? 'Consignar efectivo' : 'Mover plata entre cuentas',
     verTransferencia: 'Movimiento entre cuentas',
+    prestamo: 'Prestar plata',
+    cobro: editor.tipo === 'cobro' ? `${editor.item.persona} te devuelve` : 'Te devuelven',
   }[tipo];
 
   const accion = { gasto: guardarGasto, ingreso: guardarIngreso, deuda: guardarDeuda, fijo: guardarFijo, abono: registrarAbono, ajuste: guardarAjuste, compra: registrarCompra, cuenta: guardarCuenta,
-    topes: guardarTopes, meta: guardarMeta, aporte: aportarMeta, transferir, verTransferencia: async () => {} }[tipo];
+    topes: guardarTopes, meta: guardarMeta, aporte: aportarMeta, transferir, verTransferencia: async () => {}, prestamo: crearPrestamoAccion, cobro: cobrarPrestamoAccion }[tipo];
   const mensaje = {
     gasto: esEdicion ? 'Gasto actualizado' : 'Gasto registrado',
     ingreso: esEdicion ? 'Ingreso actualizado' : 'Ingreso registrado',
@@ -83,6 +88,8 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
     aporte: 'Listo',
     transferir: 'Movimiento registrado',
     verTransferencia: '',
+    prestamo: 'Préstamo anotado: queda en Te deben',
+    cobro: 'Pago registrado',
   }[tipo];
 
   /** Al elegir el banco, pone su nombre si el campo está vacío o tenía otro banco. */
@@ -116,7 +123,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
     if (!confirmar) return setConfirmar(true);
     setBorrando(true);
     try {
-      await borrar((tipo === 'verTransferencia' ? 'transferencia' : tipo) as 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia', item!.id);
+      await borrar((tipo === 'verTransferencia' ? 'transferencia' : tipo === 'cobro' ? 'prestamo' : tipo) as 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia' | 'prestamo', item!.id);
       avisar('Eliminado');
       ref.current?.close();
     } catch {
@@ -170,10 +177,42 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           />
         )}
 
+        {tipo === 'prestamo' && (
+          <>
+            <Campo label="¿A quién?"><input name="persona" required placeholder="Juan, mi mamá, el abuelo de mi novia…" autoComplete="off" autoFocus /></Campo>
+            <Campo label="¿Cuánto?"><Monto name="monto" /></Campo>
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿De dónde salió?" defecto={cuentas.find((c) => c.principal)?.id ?? null} obligatorio />
+            <Campo label="Nota (opcional)"><input name="nota" placeholder="Para el arriendo, me paga la otra quincena…" autoComplete="off" /></Campo>
+            <p className="nota">No cuenta como gasto: la plata sale de tu cuenta y queda en <b>Te deben</b> hasta que te la devuelvan.</p>
+          </>
+        )}
+
+        {tipo === 'cobro' && editor.tipo === 'cobro' && (
+          <>
+            <input type="hidden" name="id" value={editor.item.id} />
+            <p className="nota">
+              Te debe <b className="num">{pesos(editor.item.pendiente)}</b>
+              {editor.item.pendiente < editor.item.monto ? <> de <b className="num">{pesos(editor.item.monto)}</b> (ya te pagó {pesos(editor.item.monto - editor.item.pendiente)})</> : null}.
+            </p>
+            <Campo label="¿Cuánto te devolvió?"><Monto name="monto" defaultValue={editor.item.pendiente} /></Campo>
+            <SelectorCuenta cuentas={cuentas} etiqueta="¿A dónde entró?" defecto={editor.item.cuentaId} obligatorio />
+            <p className="nota">No cuenta como ingreso: es tu plata volviendo. Si te paga por partes, registra cada pago.</p>
+          </>
+        )}
+
         {tipo === 'gasto' && editor.tipo !== 'nuevo' && (
           <>
             <Campo label="Monto"><Monto name="monto" defaultValue={item?.monto} autoFocus /></Campo>
             <Campo label="¿En qué?"><input name="concepto" required defaultValue={item?.concepto} placeholder="Almuerzo" autoComplete="off" /></Campo>
+            {item?.id && item.categoria !== 'Ajuste' && (
+              <button type="button" className="btn chico es-prestamo" onClick={async () => {
+                await convertirGastoAccion(item.id);
+                avisar('Ahora es un préstamo: quedó en Te deben');
+                ref.current?.close();
+              }}>
+                Es un préstamo (me lo van a devolver)
+              </button>
+            )}
             <SelectorCuenta cuentas={cuentas} etiqueta="¿Con qué pagaste?" defecto={item ? item.cuentaId ?? null : cuentas.find((c) => c.principal)?.id ?? null} />
             {item?.categoria === 'Ajuste' ? (
               <input type="hidden" name="categoria" value="Ajuste" />

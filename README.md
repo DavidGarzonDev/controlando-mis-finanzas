@@ -182,6 +182,10 @@ Abre `https://TU-APP.vercel.app`: escribe tu `DASHBOARD_PASSWORD` y luego el **c
 - **Huella o Face ID (passkeys):** actívalo en cada dispositivo; la clave + código de Telegram quedan de respaldo.
 - **Notificaciones de la app:** recordatorio diario, resumen del domingo y alertas. Las llaves se crean solas (no hay que configurar nada). En iPhone, con la app instalada en la pantalla de inicio.
 
+**Préstamos a personas ("Te deben"):** escríbele al bot `le presté 30 mil a juan por nequi`: la plata sale de la cuenta pero **no cuenta como gasto**, queda en *Billetera → Te deben*. Cuando te pague: `me devolvió juan 10 mil` (puede ser por partes) y vuelve a la cuenta sin contar como ingreso. `/prestamos` o *quién me debe* para ver la lista. Si ya lo habías anotado como gasto, toca **Es préstamo** en el bot o en la ventana del gasto.
+
+**Se actualiza solo:** con el dashboard abierto, lo que registres desde Telegram aparece en unos segundos sin recargar.
+
 **Pegar notificaciones del banco:** copia la notificación o el SMS de Nequi, Bancolombia, Nu, Daviplata, Davivienda, AV Villas… y pégalo en el chat del bot. Lo registra solo (comercio, monto y cuenta por los últimos 4 dígitos o el banco; con tarjeta de crédito va a la tarjeta) y no registra dos veces lo mismo.
 
 **Alertas inteligentes:** al registrar un gasto, Pilas avisa si se parece a uno de hace pocos minutos (¿duplicado?), si es mucho más alto de lo normal en esa categoría, o si una suscripción subió de precio.

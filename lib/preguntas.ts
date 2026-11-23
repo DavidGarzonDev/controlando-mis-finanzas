@@ -23,7 +23,7 @@ const f = (v: unknown) => Math.round(Number(v) || 0);
 
 async function contexto(): Promise<string> {
   const dia = `(fecha AT TIME ZONE '${ZONA}')`;
-  const [meses, cats, gastos, ingresos, transf, cuentas, deudas, metas, r] = await Promise.all([
+  const [meses, cats, gastos, ingresos, transf, cuentas, deudas, metas, r, prestamos] = await Promise.all([
     sql().query(`SELECT to_char(${dia}, 'YYYY-MM') AS mes, SUM(monto) AS total, COUNT(*) AS veces FROM gastos
        WHERE fecha > now() - interval '6 months' GROUP BY 1 ORDER BY 1`),
     sql().query(`SELECT to_char(${dia}, 'YYYY-MM') AS mes, categoria, SUM(monto) AS total FROM gastos
@@ -39,6 +39,7 @@ async function contexto(): Promise<string> {
     db.deudas(),
     db.metas(),
     db.resumen(),
+    db.prestamos(true),
   ]);
   const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA }).format(new Date());
   return [
@@ -49,6 +50,7 @@ async function contexto(): Promise<string> {
     `GASTOS POR MES Y CATEGORÍA: ${cats.map((c) => `${c.mes} ${c.categoria} ${f(c.total)}`).join('; ')}`,
     `CUENTAS: ${cuentas.map((c) => `${c.nombre} ${f(c.saldo)}`).join('; ') || 'ninguna'}`,
     `DEUDAS (nombre, saldo, cuota, tasa): ${deudas.map((d) => `${d.nombre} ${f(d.saldo)} cuota ${f(d.cuota)} ${d.tasa ?? ''}`).join('; ') || 'ninguna'}`,
+    `TE DEBEN (préstamos que hiciste, pendiente/prestado): ${prestamos.map((p) => `${p.persona} ${f(p.pendiente)}/${f(p.monto)}`).join('; ') || 'nadie'}`,
     `METAS (nombre, ahorrado/objetivo): ${metas.map((m) => `${m.nombre} ${f(m.ahorrado)}/${f(m.objetivo)}`).join('; ') || 'ninguna'}`,
     `INGRESOS (fecha|concepto|monto|cuenta):\n${ingresos.map((i) => `${i.f}|${i.concepto}|${f(i.monto)}|${i.cuenta ?? '-'}`).join('\n')}`,
     `MOVIMIENTOS ENTRE CUENTAS (fecha|monto|de|a|nota):\n${transf.map((t) => `${t.f}|${f(t.monto)}|${t.desde ?? '-'}|${t.hacia ?? '-'}|${t.nota ?? ''}`).join('\n')}`,

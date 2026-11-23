@@ -513,6 +513,9 @@ export async function movimientosCuenta(id: number, limite = 40): Promise<{
          FROM transferencias t LEFT JOIN cuentas c ON c.id = t.desde_id WHERE t.hacia_id = $1
        UNION ALL SELECT a.fecha, 'pago', 'Pago a ' || d.nombre, -a.monto, NULL, NULL
          FROM abonos a JOIN deudas d ON d.id = a.deuda_id WHERE a.cuenta_id = $1
+       UNION ALL SELECT fecha, 'sale', 'Préstamo a ' || persona, -monto, NULL, NULL FROM prestamos WHERE cuenta_id = $1
+       UNION ALL SELECT pp.fecha, 'entra', p.persona || ' te devolvió', pp.monto, NULL, NULL
+         FROM pagos_prestamo pp JOIN prestamos p ON p.id = pp.prestamo_id WHERE pp.cuenta_id = $1
        UNION ALL SELECT fecha, 'ajuste', 'Pusiste el saldo a mano', despues - antes, antes, despues FROM ajustes_saldo WHERE cuenta_id = $1
      ) m ORDER BY fecha DESC LIMIT $2`,
     [id, limite],
@@ -560,7 +563,8 @@ export async function registrarPatrimonio() {
   await sql().query(
     `INSERT INTO patrimonio_diario (fecha, activos, deudas)
      SELECT (now() AT TIME ZONE '${ZONA}')::date,
-            (SELECT COALESCE(SUM(saldo), 0) FROM cuentas) + (SELECT COALESCE(SUM(monto), 0) FROM aportes_meta),
+            (SELECT COALESCE(SUM(saldo), 0) FROM cuentas) + (SELECT COALESCE(SUM(monto), 0) FROM aportes_meta)
+              + (SELECT COALESCE(SUM(pendiente), 0) FROM prestamos),
             (SELECT COALESCE(SUM(saldo), 0) FROM deudas)
      ON CONFLICT (fecha) DO UPDATE SET activos = EXCLUDED.activos, deudas = EXCLUDED.deudas`,
   );
@@ -799,6 +803,81 @@ export async function resumenSemana(): Promise<Semana> {
 export async function marcarSemana(fecha: string): Promise<boolean> {
   const rows = await sql()`INSERT INTO resumenes_semanales (semana) VALUES (${fecha}) ON CONFLICT DO NOTHING RETURNING semana`;
   return rows.length > 0;
+}
+
+// ---------- Préstamos a personas ("te deben") ----------
+
+export type PagoPrestamo = { id: number; fecha: string; monto: number; cuentaId: number | null };
+export type Prestamo = {
+  id: number; fecha: string; persona: string; monto: number; pendiente: number; cuentaId: number | null; nota: string | null;
+  pagos: PagoPrestamo[];
+};
+
+export async function prestamos(soloPendientes = false): Promise<Prestamo[]> {
+  const [rows, pagos] = await Promise.all([
+    sql().query(`SELECT id, fecha, persona, monto, pendiente, cuenta_id, nota FROM prestamos
+      ${soloPendientes ? 'WHERE pendiente > 0' : ''} ORDER BY (pendiente > 0) DESC, fecha DESC LIMIT 200`),
+    sql()`SELECT id, fecha, prestamo_id, monto, cuenta_id FROM pagos_prestamo ORDER BY fecha`,
+  ]);
+  return rows.map((r) => ({
+    id: n(r.id), fecha: String(r.fecha), persona: String(r.persona), monto: n(r.monto), pendiente: n(r.pendiente),
+    cuentaId: nulo(r.cuenta_id), nota: r.nota ? String(r.nota) : null,
+    pagos: pagos.filter((p) => n(p.prestamo_id) === n(r.id)).map((p) => ({ id: n(p.id), fecha: String(p.fecha), monto: n(p.monto), cuentaId: nulo(p.cuenta_id) })),
+  }));
+}
+
+/** Prestas plata: sale de la cuenta, pero no es gasto (queda como "te deben"). */
+export async function crearPrestamo(p: { persona: string; monto: number; cuentaId: number | null; nota?: string | null }): Promise<number> {
+  const [r] = await sql()`
+    INSERT INTO prestamos (persona, monto, pendiente, cuenta_id, nota)
+    VALUES (${p.persona.slice(0, 60)}, ${p.monto}, ${p.monto}, ${p.cuentaId}, ${p.nota ?? null}) RETURNING id`;
+  await moverCuenta(p.cuentaId, -p.monto);
+  return n(r.id);
+}
+
+/** Le pone cuenta a un préstamo que se anotó sin ella (botón del bot): ahí sí sale la plata. */
+export async function asignarCuentaPrestamo(id: number, cuentaId: number) {
+  const [p] = await sql()`UPDATE prestamos SET cuenta_id = ${cuentaId} WHERE id = ${id} AND cuenta_id IS NULL RETURNING monto`;
+  if (p) await moverCuenta(cuentaId, -n(p.monto));
+}
+
+/** Te devuelven (todo o una parte): la plata entra a la cuenta y baja lo que te deben. No es ingreso. */
+export async function pagarPrestamo(id: number, monto: number, cuentaId: number | null) {
+  const [p] = await sql()`SELECT pendiente FROM prestamos WHERE id = ${id}`;
+  if (!p) return null;
+  const abono = Math.min(monto, n(p.pendiente));
+  if (abono <= 0) return { abono: 0, pendiente: n(p.pendiente) };
+  await sql()`INSERT INTO pagos_prestamo (prestamo_id, monto, cuenta_id) VALUES (${id}, ${abono}, ${cuentaId})`;
+  const [q] = await sql()`UPDATE prestamos SET pendiente = pendiente - ${abono} WHERE id = ${id} RETURNING pendiente`;
+  await moverCuenta(cuentaId, abono);
+  return { abono, pendiente: n(q.pendiente) };
+}
+
+/** Borra el préstamo (si fue un error): devuelve la plata a la cuenta y deshace lo que te habían pagado. */
+export async function borrarPrestamo(id: number) {
+  const pagos = await sql()`SELECT monto, cuenta_id FROM pagos_prestamo WHERE prestamo_id = ${id}`;
+  const [p] = await sql()`DELETE FROM prestamos WHERE id = ${id} RETURNING monto, cuenta_id`;
+  if (!p) return;
+  await moverCuenta(nulo(p.cuenta_id), n(p.monto));
+  for (const x of pagos) await moverCuenta(nulo(x.cuenta_id), -n(x.monto));
+}
+
+/** Un gasto que en realidad era un préstamo: se vuelve préstamo sin mover la plata otra vez. */
+export async function convertirEnPrestamo(gastoId: number, persona: string): Promise<number | null> {
+  const [g] = await sql()`DELETE FROM gastos WHERE id = ${gastoId} RETURNING monto, cuenta_id, concepto`;
+  if (!g) return null;
+  const [r] = await sql()`
+    INSERT INTO prestamos (persona, monto, pendiente, cuenta_id, nota)
+    VALUES (${persona.slice(0, 60)}, ${n(g.monto)}, ${n(g.monto)}, ${nulo(g.cuenta_id)}, ${String(g.concepto)}) RETURNING id`;
+  return n(r.id);
+}
+
+/** "Envío a juan" / "Presté abuelo mi novia" → "Juan" / "Abuelo mi novia": la persona a partir del concepto de un gasto. */
+export function personaDeConcepto(concepto: string): string {
+  const t = concepto
+    .replace(/^(env[ií]o|pr[eé]stamo|prest[eé]|le prest[eé]|transferencia)\s+(a|al|para)?\s*/i, '')
+    .trim();
+  return t ? t[0].toUpperCase() + t.slice(1) : 'Alguien';
 }
 
 // ---------- Categorías propias ----------

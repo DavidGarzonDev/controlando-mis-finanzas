@@ -2771,3 +2771,10 @@ html, body { overflow-x: clip; }
 .apoyar-metodos b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .apoyar > .btn { justify-self: start; }
 .salir.apoyo:hover { background: rgb(255 80 120 / 0.12); color: #ffb3c4; }
+
+/* Te deben (préstamos a personas) */
+.te-deben { display: grid; gap: 10px; }
+.te-deben-total { padding: 10px 0 4px; }
+.te-deben-ico { background: var(--verde-suave) !important; color: var(--verde) !important; }
+.te-deben-pagados summary { cursor: pointer; color: var(--tinta-3); font-weight: 650; font-size: 0.88rem; }
+.btn.es-prestamo { justify-self: start; align-self: flex-start; color: var(--verde); border-color: color-mix(in srgb, var(--verde) 35%, transparent); }

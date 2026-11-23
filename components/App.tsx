@@ -4,13 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
-  ChartPie, ChartSpline, Heart, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
+  ChartPie, ChartSpline, HandCoins, Heart, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
 } from 'lucide-react';
 import { borrar, marcarFijo } from '@/app/actions';
 import { comercioDe } from '@/lib/comercios';
 import type { Consejo, Nivel } from '@/lib/consejos';
 import type {
-  Cuenta, Deuda, Fijo, Gasto, Hormiga, Ingreso, Meta, MesHistorial, MovCredito, Pendiente, PuntoPatrimonio, Resumen as TResumen,
+  Cuenta, Deuda, Fijo, Gasto, Hormiga, Ingreso, Meta, MesHistorial, MovCredito, Pendiente, Prestamo, PuntoPatrimonio, Resumen as TResumen,
   Suscripcion, Transferencia,
 } from '@/lib/datos';
 import type { Hoy } from '@/lib/fechas';
@@ -22,6 +22,7 @@ import { Contador } from './animacion';
 import { BotonPrivado, BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
 import { Paleta } from './Paleta';
+import { Sincronizar } from './Sincronizar';
 import { confeti } from './Celebrar';
 import { Historias } from './Historias';
 import { AnioEnPilas } from './AnioEnPilas';
@@ -38,6 +39,7 @@ type Props = {
   metas: Meta[]; transferencias: Transferencia[]; hormiga: Hormiga[]; suscripciones: Suscripcion[]; patrimonio: PuntoPatrimonio[];
   retos: Reto[];
   categorias: CategoriaPropia[];
+  prestamos: Prestamo[];
 };
 type Tab = 'resumen' | 'movimientos' | 'billetera' | 'plan';
 
@@ -253,10 +255,10 @@ export default function App(p: Props) {
           )}
           {tab === 'resumen' && <Resumen {...p} abrir={setEditor} ir={ir} avisar={avisar} verHistorias={() => setHistorias(true)} />}
           {tab === 'movimientos' && (
-            <Movimientos gastos={p.gastos} ingresos={p.ingresos} transferencias={p.transferencias} cuentas={p.cuentas} r={p.resumen} mes={p.mes} hoyClave={hoyClave} abrir={setEditor} />
+            <Movimientos gastos={p.gastos} ingresos={p.ingresos} transferencias={p.transferencias} prestamos={p.prestamos} cuentas={p.cuentas} r={p.resumen} mes={p.mes} hoyClave={hoyClave} abrir={setEditor} />
           )}
           {tab === 'billetera' && (
-            <Creditos deudas={p.deudas} cuentas={p.cuentas} r={p.resumen} mov={p.movCredito} patrimonio={p.patrimonio} hoyClave={hoyClave} abrir={setEditor} />
+            <Creditos deudas={p.deudas} cuentas={p.cuentas} r={p.resumen} mov={p.movCredito} patrimonio={p.patrimonio} prestamos={p.prestamos} hoyClave={hoyClave} abrir={setEditor} />
           )}
           {tab === 'plan' && <Plan fijos={p.fijos} metas={p.metas} retos={p.retos} r={p.resumen} mes={p.mes} abrir={setEditor} avisar={avisar} />}
         </main>
@@ -269,6 +271,7 @@ export default function App(p: Props) {
       {anio && <AnioEnPilas anio={anio} cerrar={() => setAnio(null)} />}
       <Paleta abierta={paleta} verAnio={() => setAnio(p.hoy.mes === 1 ? p.hoy.anio - 1 : p.hoy.anio)} cerrar={() => setPaleta(false)} ir={ir} abrir={setEditor} mes={p.mes} />
 
+      <Sincronizar />
       <div className="aviso-zona" aria-live="polite">
         {aviso && (
           <p className="aviso" key={aviso.n} style={{ animationDuration: `${duracionAviso(aviso.texto)}ms` }}>
@@ -283,7 +286,7 @@ export default function App(p: Props) {
 // ===========================================================================
 // Resumen
 
-function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes, metas, hormiga, suscripciones, patrimonio, abrir, ir, avisar, verHistorias }: Props & {
+function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes, metas, hormiga, suscripciones, patrimonio, prestamos, abrir, ir, avisar, verHistorias }: Props & {
   abrir: (e: Editor) => void; ir: (t: Tab) => void; avisar: (m: string) => void; verHistorias: () => void;
 }) {
   const presupuestoMes = Math.max(0, r.ingresos - r.cuotas - r.fijos - r.extraAbonos - r.ahorro);
@@ -294,7 +297,7 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
   return (
     <div className="resumen">
       {r.esActual ? (
-        <Bento r={r} porDia={porDia} historial={historial} patrimonio={patrimonio} limite={limiteRacha} abrir={abrir} ir={ir} />
+        <Bento r={r} porDia={porDia} historial={historial} patrimonio={patrimonio} limite={limiteRacha} teDeben={prestamos.reduce((s, x) => s + x.pendiente, 0)} abrir={abrir} ir={ir} />
       ) : (
         <CierreMes r={r} verHistorias={verHistorias} />
       )}
@@ -441,8 +444,8 @@ function Resumen({ resumen: r, gastos, deudas, porDia, historial, consejos, mes,
  * Resumen tipo bento: la cifra del día grande y, al lado, cuatro fichas con lo que más se mira.
  * Cada ficha lleva su tendencia (mini curva, flecha o puntos) para leerla de un vistazo.
  */
-function Bento({ r, porDia, historial, patrimonio, limite, abrir, ir }: {
-  r: TResumen; porDia: number[]; historial: MesHistorial[]; patrimonio: PuntoPatrimonio[]; limite: number;
+function Bento({ r, porDia, historial, patrimonio, limite, teDeben, abrir, ir }: {
+  r: TResumen; porDia: number[]; historial: MesHistorial[]; patrimonio: PuntoPatrimonio[]; limite: number; teDeben: number;
   abrir: (e: Editor) => void; ir: (t: Tab) => void;
 }) {
   const racha = rachaLimite(porDia, limite, r.diaHoy);
@@ -477,6 +480,7 @@ function Bento({ r, porDia, historial, patrimonio, limite, abrir, ir }: {
         <b className={`ficha-cifra num ${r.disponible < 0 ? 'neg' : ''}`}><Contador valor={r.disponible} /></b>
         <span className="ficha-sub">
           {r.modo === 'cuentas' ? <>En cuentas <b className="num">{pesos(r.enCuentas)}</b> · por pagar <b className="num">{pesos(r.totalPendiente)}</b></> : <>Entró <b className="num">{pesos(r.ingresos)}</b> este mes</>}
+          {teDeben > 0 && <> · te deben <b className="num pos">{pesos(teDeben)}</b></>}
         </span>
         {enCuentas.length >= 2 && <Chispa valores={enCuentas} etiqueta="Lo que tienes en cuentas, últimos días" />}
       </button>
@@ -732,8 +736,8 @@ function Pendientes({ r, deudas, mes, abrir, avisar, ir }: {
 // ===========================================================================
 // Movimientos
 
-function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyClave, abrir }: {
-  gastos: Gasto[]; ingresos: Ingreso[]; transferencias: Transferencia[]; cuentas: Cuenta[]; r: TResumen; mes: string; hoyClave: string;
+function Movimientos({ gastos, ingresos, transferencias, prestamos, cuentas, r, mes, hoyClave, abrir }: {
+  gastos: Gasto[]; ingresos: Ingreso[]; transferencias: Transferencia[]; prestamos: Prestamo[]; cuentas: Cuenta[]; r: TResumen; mes: string; hoyClave: string;
   abrir: (e: Editor) => void;
 }) {
   const [filtro, setFiltro] = useState<'todos' | 'gastos' | 'ingresos' | 'cuentas'>('todos');
@@ -746,7 +750,8 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
     type Fila =
       | { tipo: 'gasto'; g: Gasto; fecha: string }
       | { tipo: 'ingreso'; i: Ingreso; fecha: string }
-      | { tipo: 'transferencia'; t: Transferencia; fecha: string };
+      | { tipo: 'transferencia'; t: Transferencia; fecha: string }
+      | { tipo: 'prestamo'; p: Prestamo; monto: number; devolucion: boolean; fecha: string };
     const q = busqueda.trim().toLowerCase();
     const coincide = (t: string) => !q || t.toLowerCase().includes(q);
     const lista: Fila[] = [
@@ -759,6 +764,13 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
       ...((filtro === 'todos' || filtro === 'cuentas') && !cat
         ? transferencias.filter((t) => coincide(t.nota ?? 'transferencia')).map((t) => ({ tipo: 'transferencia' as const, t, fecha: t.fecha }))
         : []),
+      // Préstamos y lo que te devuelven, de este mes (no son gasto ni ingreso)
+      ...((filtro === 'todos' || filtro === 'cuentas') && !cat
+        ? prestamos.filter((p) => coincide(p.persona)).flatMap((p) => [
+            ...(claveDia(p.fecha).startsWith(mes) ? [{ tipo: 'prestamo' as const, p, monto: p.monto, devolucion: false, fecha: p.fecha }] : []),
+            ...p.pagos.filter((x) => claveDia(x.fecha).startsWith(mes)).map((x) => ({ tipo: 'prestamo' as const, p, monto: x.monto, devolucion: true, fecha: x.fecha })),
+          ])
+        : []),
     ].sort((a, b) => +new Date(b.fecha) - +new Date(a.fecha));
     const grupos = new Map<string, Fila[]>();
     for (const f of lista) {
@@ -766,7 +778,7 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
       grupos.set(k, [...(grupos.get(k) ?? []), f]);
     }
     return [...grupos.entries()];
-  }, [gastos, ingresos, transferencias, filtro, cat, busqueda]);
+  }, [gastos, ingresos, transferencias, prestamos, mes, filtro, cat, busqueda]);
 
   return (
     <div className="columna">
@@ -830,6 +842,22 @@ function Movimientos({ gastos, ingresos, transferencias, cuentas, r, mes, hoyCla
                           </span>
                           <span className="puntos" aria-hidden />
                           <span className="fila-monto num pos">+{pesos(f.i.monto)}</span>
+                        </button>
+                      </li>
+                    );
+                  }
+                  if (f.tipo === 'prestamo') {
+                    const cta = nombreCuenta(f.devolucion ? (f.p.pagos.find((x) => x.fecha === f.fecha)?.cuentaId ?? null) : f.p.cuentaId);
+                    return (
+                      <li key={`p${f.p.id}-${f.fecha}`}>
+                        <button className="fila" onClick={() => abrir({ tipo: 'cobro', item: f.p })}>
+                          <span className="fila-ico te-deben-ico" aria-hidden><HandCoins size={16} /></span>
+                          <span className="fila-txt">
+                            <span className="fila-nombre">{f.devolucion ? `${f.p.persona} te devolvió` : `Préstamo a ${f.p.persona}`}</span>
+                            <span className="fila-sub">{f.devolucion ? 'Devolución' : 'Te debe'} · {hora(f.fecha)}{cta ? ` · ${cta}` : ''} · no es {f.devolucion ? 'ingreso' : 'gasto'}</span>
+                          </span>
+                          <span className="puntos" aria-hidden />
+                          <span className={`fila-monto num ${f.devolucion ? 'pos' : ''}`}>{f.devolucion ? '+' : '−'}{pesos(f.monto)}</span>
                         </button>
                       </li>
                     );

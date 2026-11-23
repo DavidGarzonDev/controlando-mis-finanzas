@@ -176,6 +176,10 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
     case '/preguntar':
       if (!args) return 'Pregúntame lo que quieras de tu plata, por ejemplo: <code>¿cuánto gasté en gasolina este mes?</code>';
       return (await import('./preguntas')).responderPregunta(args);
+    case '/prestamos':
+    case '/préstamos':
+    case '/medeben':
+      return textoPrestamos();
     case '/semana':
       return { texto: 'Te mando el resumen de la semana 📊', botones: [], semana: true };
     case '/menu':
@@ -244,6 +248,18 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
     const r = await ahorrar(texto.replace(/^\S+\s*/, ''), true);
     if (r) return r;
   }
+  // "le presté 30 mil al abuelo de mi novia en efectivo" → préstamo (no es gasto, queda en "te deben")
+  if (/^(le\s+|les\s+)?(prest[eé]|hice un pr[eé]stamo)(?![\p{L}\d])/iu.test(texto) && extraerMonto(texto)) {
+    const r = await prestar(texto);
+    if (r) return r;
+  }
+  // "me devolvió juan 30 mil", "juan me pagó lo que le presté" → abono a un préstamo (no es ingreso)
+  if (/\bme\s+(devolvi[oó]|devolvieron|pag[oó]|pagaron|abon[oó]|consign[oó]|transfiri[oó]|mand[oó]|envi[oó]|dio)(?![\p{L}\d])/iu.test(texto)) {
+    const r = await cobrar(texto);
+    if (r) return r;
+  }
+  if (/^¿?(qui[eé]n(es)?|cu[aá]nto)\s+me\s+deben?\b/i.test(texto)) return textoPrestamos();
+
   // "le mandé 50 mil a juan por nequi y me dio efectivo" (cambio) o "le mandé 50 mil a mi mamá por nequi" (envío)
   if (/^(le\s+|les\s+)?(mand[eé]|envi[eé]|transfer[ií]|gir[eé]|consign[eé]|pas[eé])(?![\p{L}\d])/iu.test(texto) && extraerMonto(texto)) {
     const r = await envioAPersona(texto);
@@ -388,6 +404,37 @@ export async function procesarBoton(dato: string): Promise<{ aviso: string; text
   if (m) {
     const r = await cambiarCategoria(Number(m[1]), m[2]);
     return conTarjeta(r ?? 'No encontré esa categoría', 'g', Number(m[1]));
+  }
+  m = dato.match(/^dp:(\d+)$/);
+  if (m) {
+    await db.borrarPrestamo(Number(m[1]));
+    return { aviso: 'Préstamo borrado', texto: '<i>Borré el préstamo y la plata volvió a su cuenta.</i>', botones: [] };
+  }
+  m = dato.match(/^pc:(\d+):(\d+)$/);
+  if (m) {
+    const p = (await db.prestamos()).find((x) => x.id === Number(m![1]));
+    if (!p) return { aviso: 'Ese préstamo ya no existe', texto: '<i>Este préstamo ya no existe.</i>', botones: [] };
+    if (!p.cuentaId) await db.asignarCuentaPrestamo(p.id, Number(m[2]));
+    const c = (await db.cuentas()).find((x) => x.id === Number(m![2]));
+    return {
+      aviso: `Salió de ${c?.nombre ?? 'la cuenta'}`,
+      texto: `🤝 Le prestaste <b>${pesos(p.monto)}</b> a <b>${esc(p.persona)}</b>\nSalió de <b>${esc(c?.nombre ?? '')}</b> · queda ${pesos(c?.saldo ?? 0)}\nNo cuenta como gasto: queda en <b>Te deben</b>.`,
+      botones: [[{ texto: 'Deshacer', dato: `dp:${p.id}` }]],
+    };
+  }
+  m = dato.match(/^pp:(\d+):(\d+):(\d+)$/);
+  if (m) return { aviso: 'Listo', texto: await textoCobro(Number(m[1]), Number(m[2]), Number(m[3])), botones: [] };
+  m = dato.match(/^ep:(\d+)$/);
+  if (m) {
+    const g = await db.gastoPorId(Number(m[1]));
+    if (!g) return { aviso: 'Ese gasto ya no existe', texto: '<i>Este movimiento ya no existe.</i>', botones: [] };
+    const persona = db.personaDeConcepto(g.concepto);
+    const id = await db.convertirEnPrestamo(g.id, persona);
+    return {
+      aviso: 'Ahora es un préstamo',
+      texto: `🤝 Listo: <b>${esc(g.concepto)}</b> (${pesos(g.monto)}) ya no es gasto. Quedó en <b>Te deben</b> a nombre de <b>${esc(persona)}</b>.\nCuando te pague: <code>me devolvió ${esc(persona.toLowerCase())} ${Math.round(g.monto / 1000)} mil</code>`,
+      botones: id ? [] : [],
+    };
   }
   m = dato.match(/^d:(g|i):(\d+)$/);
   if (m) {
@@ -906,7 +953,7 @@ async function retiroOConsignacion(args: string, tipo: 'retiro' | 'consignacion'
  * - Si dice a qué otra cuenta tuya fue, es una transferencia (la maneja transferirCuentas).
  * - Si no, es un gasto "Envío a <persona>" que sale de esa cuenta.
  */
-async function envioAPersona(texto: string): Promise<string | null> {
+async function envioAPersona(texto: string): Promise<Respuesta | null> {
   const m = extraerMonto(texto);
   if (!m) return null;
   const cs = await db.cuentas();
@@ -950,14 +997,104 @@ async function envioAPersona(texto: string): Promise<string | null> {
 
   const via = /\b(llave|bre-?b)\b/i.test(texto) ? ' (llave)' : '';
   const concepto = quien ? `Envío a ${quien}` : 'Envío';
-  await db.insertarGasto({ concepto, monto: m.monto, categoria: 'Otros', origen: 'telegram', texto, cuentaId: origen.c.id });
-  const r = await db.resumen();
+  const id = await db.insertarGasto({ concepto: `${concepto}${via}`, monto: m.monto, categoria: 'Otros', origen: 'telegram', texto, cuentaId: origen.c.id });
+  const t = await tarjetaGasto(id, { extra: ['<i>¿Te lo van a devolver? Toca <b>Es préstamo</b> y queda en "Te deben" en vez de gasto.</i>'] });
+  return t ?? `📤 ${esc(concepto)}${via}: ${pesos(m.monto)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Préstamos a personas: la plata sale, pero no es gasto; cuando te la devuelven, no es ingreso.
+
+const NO_PERSONA = new Set(['mi', 'mis', 'de', 'del', 'la', 'el', 'los', 'las', 'a', 'al', 'para', 'por', 'con', 'en', 'y', 'que', 'lo', 'le', 'me']);
+const palabrasPersona = (t: string) => normal(t).split(/[^\p{L}\d]+/u).filter((w) => w.length >= 3 && !NO_PERSONA.has(w));
+
+/** "le presté 30 mil al abuelo de mi novia en efectivo" */
+async function prestar(texto: string): Promise<Respuesta | null> {
+  const m = extraerMonto(texto);
+  if (!m) return null;
+  const cs = await db.cuentas();
+  const esEfectivo = /\b(efectivo|cash|billetes?)\b/i.test(texto);
+  if (esEfectivo) await db.cuentaEfectivo();
+  const todas = esEfectivo ? await db.cuentas() : cs;
+  const mencionada = cuentaDelTexto(texto, todas)?.c ?? (esEfectivo ? todas.find((c) => c.banco === 'efectivo') : undefined);
+  const principal = todas.find((c) => c.principal) ?? (todas.length === 1 ? todas[0] : undefined);
+  const cuenta = mencionada ?? principal;
+
+  // ¿A quién? lo que va después de "a / al / para", sin el monto ni la cuenta
+  const tras = m.resto.match(/\b(?:a|al|para)\s+(.+)$/i)?.[1] ?? m.resto.replace(/^(le\s+|les\s+)?(prest[eé]|hice un pr[eé]stamo)\s*/i, '');
+  const persona = tras
+    .replace(/\s+(por|con|desde|en|de mi|del|de la)\s+(nequi|daviplata|bancolombia|nu|efectivo|cuenta|ahorros|av villas|davivienda|tarjeta|billetes?|cash)\b.*$/i, '')
+    .replace(/\s+en\s+efectivo\b.*$/i, '')
+    .replace(/^(el|la|los|las)\s+/i, '')
+    .trim();
+  const nombre = persona ? persona[0].toUpperCase() + persona.slice(1, 60) : 'Alguien';
+
+  const id = await db.crearPrestamo({ persona: nombre, monto: m.monto, cuentaId: cuenta?.id ?? null, nota: texto.slice(0, 200) });
+  const total = (await db.prestamos(true)).reduce((s, p) => s + p.pendiente, 0);
+  const lineas = [
+    `🤝 Le prestaste <b>${pesos(m.monto)}</b> a <b>${esc(nombre)}</b>`,
+    cuenta ? `Salió de <b>${esc(cuenta.nombre)}</b> · queda ${pesos(cuenta.saldo - m.monto)}` : '',
+    'No cuenta como gasto: queda en <b>Te deben</b>.',
+    `En total te deben ${pesos(total)}.`,
+    `Cuando te pague: <code>me devolvió ${esc(nombre.toLowerCase())} ${m.monto >= 1000 ? `${Math.round(m.monto / 1000)} mil` : m.monto}</code>`,
+  ].filter(Boolean);
+  const botones: Boton[][] = [];
+  if (!cuenta && todas.length >= 2) {
+    lineas.push('', '<b>¿De qué cuenta salió?</b>');
+    const fila = todas.slice(0, 9).map((c) => ({ texto: c.nombre, dato: `pc:${id}:${c.id}` }));
+    for (let i = 0; i < fila.length; i += 3) botones.push(fila.slice(i, i + 3));
+  }
+  botones.push([{ texto: 'Deshacer', dato: `dp:${id}` }]);
+  return { texto: lineas.join('\n'), botones };
+}
+
+/** "me devolvió juan 30 mil" → busca el préstamo de esa persona y registra el abono. */
+async function cobrar(texto: string): Promise<Respuesta | null> {
+  const pendientes = await db.prestamos(true);
+  if (!pendientes.length) return null;
+  const palabras = new Set(palabrasPersona(texto));
+  const candidatos = pendientes
+    .map((p) => ({ p, coinciden: palabrasPersona(p.persona).filter((w) => palabras.has(w)).length }))
+    .filter((x) => x.coinciden > 0)
+    .sort((a, b) => b.coinciden - a.coinciden || a.p.fecha.localeCompare(b.p.fecha));
+  if (!candidatos.length) return null; // "me pagaron la quincena" sigue siendo ingreso
+  const p = candidatos[0].p;
+  const m = extraerMonto(texto);
+  const monto = Math.min(m?.monto ?? p.pendiente, p.pendiente);
+
+  const cs = await db.cuentas();
+  const esEfectivo = /\b(efectivo|cash|billetes?)\b/i.test(texto);
+  const cuenta = cuentaDelTexto(texto, cs)?.c ?? (esEfectivo ? await db.cuentaEfectivo() : undefined) ?? cs.find((c) => c.principal) ?? (cs.length === 1 ? cs[0] : undefined);
+  if (!cuenta && cs.length >= 2) {
+    const fila = cs.slice(0, 9).map((c) => ({ texto: c.nombre, dato: `pp:${p.id}:${monto}:${c.id}` }));
+    const botones: Boton[][] = [];
+    for (let i = 0; i < fila.length; i += 3) botones.push(fila.slice(i, i + 3));
+    return { texto: `🤝 ${esc(p.persona)} te devuelve ${pesos(monto)} (te debía ${pesos(p.pendiente)}).\n\n<b>¿A qué cuenta entró?</b>`, botones };
+  }
+  return textoCobro(p.id, monto, cuenta?.id ?? null);
+}
+
+async function textoCobro(prestamoId: number, monto: number, cuentaId: number | null): Promise<string> {
+  const r = await db.pagarPrestamo(prestamoId, monto, cuentaId);
+  const p = (await db.prestamos()).find((x) => x.id === prestamoId);
+  if (!r || !p) return 'Ese préstamo ya no existe.';
+  const cuenta = cuentaId ? (await db.cuentas()).find((c) => c.id === cuentaId) : undefined;
   return [
-    `📤 ${esc(concepto)}${via}: ${pesos(m.monto)}`,
-    `Salió de <b>${esc(origen.c.nombre)}</b> · saldo ${pesos(origen.c.saldo - m.monto)}`,
-    r.modo === 'cuentas' || r.ingresos > 0 ? `Libre: ${pesos(r.disponible)}` : '',
-    `Si te lo van a devolver, cuando te paguen escríbeme: <code>me pagó ${esc(quien.replace(/^(mi|la|el)\s+/i, '') || 'juan')} ${Math.round(m.monto / 1000)} mil por ${esc(origen.c.nombre.toLowerCase())}</code>`,
+    r.pendiente === 0 ? `✅ <b>${esc(p.persona)}</b> te pagó todo (${pesos(p.monto)}). ¡Cuentas claras! 🎉` : `🤝 <b>${esc(p.persona)}</b> te devolvió ${pesos(r.abono)}. Todavía te debe <b>${pesos(r.pendiente)}</b>.`,
+    cuenta ? `Entró a <b>${esc(cuenta.nombre)}</b> · queda ${pesos(cuenta.saldo)}` : '',
+    'No cuenta como ingreso: era tu plata volviendo.',
   ].filter(Boolean).join('\n');
+}
+
+/** /prestamos — quién te debe y cuánto. */
+async function textoPrestamos(): Promise<string> {
+  const ps = await db.prestamos(true);
+  if (!ps.length) return '🤝 Nadie te debe plata. Para anotar un préstamo: <code>le presté 30 mil a juan por nequi</code>';
+  const total = ps.reduce((s, p) => s + p.pendiente, 0);
+  const f = (d: string) => new Date(d).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short' });
+  return `<b>🤝 Te deben ${pesos(total)}</b>\n\n${ps
+    .map((p) => `• <b>${esc(p.persona)}</b>: ${pesos(p.pendiente)}${p.pendiente < p.monto ? ` de ${pesos(p.monto)}` : ''} <i>(desde el ${f(p.fecha)})</i>`)
+    .join('\n')}\n\nCuando te paguen: <code>me devolvió ${esc(ps[0].persona.toLowerCase())} ${Math.round(ps[0].pendiente / 1000)} mil</code>`;
 }
 
 /** Marca como pagada la cuota de un crédito (o un gasto fijo) sin tocar ningún saldo. */

@@ -7,12 +7,12 @@ import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, CalendarClo
 import { Plastico, Reverso, useGiroscopio } from './Plastico';
 import { mesDentroDe, planDeudas, simularPago, tasaMensual } from '@/lib/consejos';
 import { CurvaPatrimonio } from './graficas';
-import type { Cuenta, Deuda, MovCredito, PuntoPatrimonio, Resumen } from '@/lib/datos';
+import type { Cuenta, Deuda, MovCredito, Prestamo, PuntoPatrimonio, Resumen } from '@/lib/datos';
 import type { Editor } from './Modal';
 import { fechaCorta, pesos } from './util';
 
-export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir }: {
-  deudas: Deuda[]; cuentas: Cuenta[]; r: Resumen; mov: Record<number, MovCredito[]>; patrimonio: PuntoPatrimonio[]; hoyClave: string;
+export function Creditos({ deudas, cuentas, r, mov, patrimonio, prestamos, hoyClave, abrir }: {
+  deudas: Deuda[]; cuentas: Cuenta[]; r: Resumen; mov: Record<number, MovCredito[]>; patrimonio: PuntoPatrimonio[]; prestamos: Prestamo[]; hoyClave: string;
   abrir: (e: Editor) => void;
 }) {
   const enCuentas = cuentas.reduce((s, c) => s + c.saldo, 0);
@@ -46,7 +46,7 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
         <div className="bloque-cab">
           <div>
             <h2 id="t-patrimonio"><TrendingUp size={18} aria-hidden className="ico-titulo" /> Tu patrimonio</h2>
-            <p className="sub">Lo que tienes (cuentas + metas) menos lo que debes</p>
+            <p className="sub">Lo que tienes (cuentas + metas + lo que te deben) menos lo que debes</p>
           </div>
           <b className={`patrimonio-cifra num ${enCuentas - total < 0 ? 'neg' : ''}`}><Contador valor={enCuentas - total} /></b>
         </div>
@@ -88,6 +88,8 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, hoyClave, abrir 
           <span>Agrega tus cuentas: Bancolombia, Nequi, Nu, Daviplata…</span>
         </button>
       )}
+
+      <TeDeben prestamos={prestamos} hoyClave={hoyClave} abrir={abrir} />
 
       {/* ---------- Billetera de tarjetas ---------- */}
       <div className="bloque-cab">
@@ -442,5 +444,60 @@ function Historial({ mov, hoyClave }: { mov?: MovCredito[]; hoyClave: string }) 
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Te deben: plata que prestaste. Salió de tu cuenta pero no es gasto; cuando te pagan, no es ingreso. */
+function TeDeben({ prestamos, hoyClave, abrir }: { prestamos: Prestamo[]; hoyClave: string; abrir: (e: Editor) => void }) {
+  const pendientes = prestamos.filter((p) => p.pendiente > 0);
+  const pagados = prestamos.filter((p) => p.pendiente === 0);
+  const total = pendientes.reduce((s, p) => s + p.pendiente, 0);
+  return (
+    <section aria-labelledby="t-te-deben" className="te-deben">
+      <div className="bloque-cab">
+        <h2 id="t-te-deben"><HandCoins size={18} aria-hidden className="ico-titulo" /> Te deben</h2>
+        <button className="btn chico" onClick={() => abrir({ tipo: 'prestamo' })}><Plus size={16} aria-hidden /> Prestar plata</button>
+      </div>
+      {pendientes.length ? (
+        <div className="bloque-lista">
+          <p className="sub te-deben-total">En total te deben <b className="num">{pesos(total)}</b>. No es gasto: es tu plata por volver.</p>
+          <ul className="libro">
+            {pendientes.map((p) => (
+              <li key={p.id}>
+                <button className="fila" onClick={() => abrir({ tipo: 'cobro', item: p })} aria-label={`${p.persona} te debe ${pesos(p.pendiente)}. Registrar pago`}>
+                  <span className="fila-ico te-deben-ico" aria-hidden><HandCoins size={16} /></span>
+                  <span className="fila-txt">
+                    <span className="fila-nombre">{p.persona}</span>
+                    <span className="fila-sub">
+                      Desde {fechaCorta(p.fecha, hoyClave).toLowerCase()}
+                      {p.pendiente < p.monto ? ` · ya te pagó ${pesos(p.monto - p.pendiente)} de ${pesos(p.monto)}` : ''}
+                    </span>
+                  </span>
+                  <span className="puntos" aria-hidden />
+                  <span className="fila-monto num">{pesos(p.pendiente)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="sub">Toca uno cuando te pague. Desde Telegram: <code>me devolvió {pendientes[0].persona.toLowerCase()} 10 mil</code></p>
+        </div>
+      ) : (
+        <p className="sub">Nadie te debe plata. Si prestas, anótalo aquí o en Telegram: <code>le presté 30 mil a juan por nequi</code>. No cuenta como gasto.</p>
+      )}
+      {pagados.length > 0 && (
+        <details className="te-deben-pagados">
+          <summary>Ya te pagaron ({pagados.length})</summary>
+          <ul className="libro">
+            {pagados.slice(0, 10).map((p) => (
+              <li key={p.id} className="fila">
+                <span className="fila-txt"><span className="fila-nombre">{p.persona}</span><span className="fila-sub">Prestado {fechaCorta(p.fecha, hoyClave).toLowerCase()} · pagado ✓</span></span>
+                <span className="puntos" aria-hidden />
+                <span className="fila-monto num">{pesos(p.monto)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }

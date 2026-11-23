@@ -211,7 +211,7 @@ export async function marcarFijo(id: number, pagado: boolean, mes?: string) {
   refrescar();
 }
 
-export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia', id: number) {
+export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia' | 'prestamo', id: number) {
   await listo();
   if (tipo === 'gasto') await db.borrarGasto(id);
   if (tipo === 'ingreso') await db.borrarIngreso(id);
@@ -220,6 +220,7 @@ export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cue
   if (tipo === 'cuenta') await db.borrarCuenta(id);
   if (tipo === 'meta') await db.borrarMeta(id);
   if (tipo === 'transferencia') await db.borrarTransferencia(id);
+  if (tipo === 'prestamo') await db.borrarPrestamo(id);
   refrescar();
 }
 
@@ -344,6 +345,33 @@ export async function crearCategoriaAccion(nombre: string, emoji: string | null)
   refrescar();
   const propia = (await db.categoriasPropias()).find((c) => c.nombre === n);
   return propia ?? { nombre: n, emoji: null, color: null };
+}
+
+// ---------------------------------------------------------------------------
+// Préstamos a personas ("te deben")
+
+export async function crearPrestamoAccion(fd: FormData) {
+  await listo();
+  const monto = entero(fd, 'monto');
+  const persona = texto(fd, 'persona');
+  if (!monto || !persona) return;
+  await db.crearPrestamo({ persona: persona[0].toUpperCase() + persona.slice(1), monto, cuentaId: await cuentaDe(fd), nota: texto(fd, 'nota') || null });
+  refrescar();
+}
+export async function cobrarPrestamoAccion(fd: FormData) {
+  await listo();
+  const id = idDe(fd);
+  const monto = entero(fd, 'monto');
+  if (id && monto > 0) await db.pagarPrestamo(id, monto, await cuentaDe(fd));
+  refrescar();
+}
+/** Un gasto que en realidad era un préstamo. */
+export async function convertirGastoAccion(id: number) {
+  await listo();
+  const g = await db.gastoPorId(Number(id));
+  if (!g) return;
+  await db.convertirEnPrestamo(g.id, db.personaDeConcepto(g.concepto));
+  refrescar();
 }
 
 // ---------------------------------------------------------------------------
