@@ -889,25 +889,34 @@ async function envioAPersona(texto: string): Promise<string | null> {
   const sinVerbo = texto.replace(/^(le\s+|les\s+)?\S+\s*/i, '');
   const meDioEfectivo = /\bme\s+(dio|dieron|devolvi[oó]|entreg[oó]|pas[oó])\b|\ben\s+efectivo\b|\ba\s+cambio\b|\bcash\b/i.test(texto);
 
-  // La cuenta desde donde salió: "por nequi", "desde bancolombia", "con daviplata" (no el efectivo que te dieron)
-  const sinEfectivo = sinVerbo.replace(/\b(en\s+)?efectivo\b|\bcash\b/gi, ' ');
-  const origen = cuentaDelTexto(sinEfectivo, cs.filter((c) => c.banco !== 'efectivo'));
+  // Partimos el texto en lo de antes y lo de después del "a / al / para": "2000 de nequi" | "la cuenta de nu"
+  const corte = sinVerbo.match(/^(.*?)\b(?:a|al|para)\s+(.+)$/i);
+  const antes = corte?.[1] ?? sinVerbo;
+  const despues = corte?.[2] ?? '';
+  const sinEf = (t: string) => t.replace(/\b(en\s+)?efectivo\b|\bcash\b/gi, ' ');
+  const bancos = cs.filter((c) => c.banco !== 'efectivo');
+
+  // La cuenta desde donde salió: primero la que dices antes del "a…" ("de nequi"); si no, la que nombres en cualquier parte
+  // ("a juan por nequi", "desde bancolombia"). No cuenta el efectivo que te dieron.
+  const origen = cuentaDelTexto(sinEf(antes), bancos) ?? cuentaDelTexto(sinEf(sinVerbo), bancos);
   if (!origen) return null;
 
-  // ¿A quién? "a juan", "a mi mamá", "al arrendador"
-  const quien = (sinVerbo.match(/\b(?:a|al|para)\s+((?:mi\s+|la\s+|el\s+)?[\p{L}]+(?:\s+[\p{L}]+)?)/iu)?.[1] ?? '')
-    .replace(/\s+(por|desde|con|de|y|en)$/i, '')
-    .replace(/\s+(por|desde|con|de|y|en)\s+.*$/i, '')
-    .trim();
-  // Si "a quién" es otra cuenta tuya, es una transferencia entre tus cuentas.
-  const destino = quien ? cuentaDelTexto(quien, cs) : null;
-  if (destino) {
-    const resto = sinVerbo.replace(new RegExp(`\\b(a|al|para)\\s+${quien.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'), ' ');
-    const desde = cuentaDelTexto(resto, cs.filter((c) => c.id !== destino.c.id));
-    if (!desde) return null;
-    await db.transferir({ desdeId: desde.c.id, haciaId: destino.c.id, monto: m.monto });
-    return `🔁 Pasaste ${pesos(m.monto)} de <b>${esc(desde.c.nombre)}</b> (${pesos(desde.c.saldo - m.monto)}) a <b>${esc(destino.c.nombre)}</b> (${pesos(destino.c.saldo + m.monto)}).`;
+  // Si después del "a…" nombras OTRA cuenta tuya ("a la cuenta de nu", "a nequi"), es una transferencia entre tus cuentas.
+  const destino = despues ? cuentaDelTexto(despues, cs.filter((c) => c.id !== origen.c.id)) : null;
+  if (destino && !meDioEfectivo) {
+    await db.transferir({ desdeId: origen.c.id, haciaId: destino.c.id, monto: m.monto });
+    const aviso = origen.c.saldo - m.monto < 0 ? `\n⚠️ ${esc(origen.c.nombre)} quedó en negativo: revisa su saldo con /saldo.` : '';
+    return `🔁 Pasaste ${pesos(m.monto)} de <b>${esc(origen.c.nombre)}</b> (${pesos(origen.c.saldo - m.monto)}) a <b>${esc(destino.c.nombre)}</b> (${pesos(destino.c.saldo + m.monto)}).\nNo cuenta como gasto: solo cambiaste de bolsillo.${aviso}`;
   }
+
+  // ¿A quién? "a juan", "a mi mamá", "al arrendador", "a la cuenta de mi novia"
+  const quien = despues
+    .replace(/\s+(por|desde|con|y|en|de\s+(?:mi\s+)?(?:nequi|daviplata|bancolombia|nu|cuenta))\b.*$/i, '')
+    .replace(/^(?:la\s+)?cuenta\s+(?:de\s+)?/i, '')
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(' ')
+    .trim();
 
   if (meDioEfectivo) {
     const efectivo = await db.cuentaEfectivo();
