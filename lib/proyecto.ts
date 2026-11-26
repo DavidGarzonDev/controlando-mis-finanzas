@@ -7,7 +7,7 @@ export const PROYECTO = {
   repo: 'https://github.com/DavidGarzonDev/controlando-mis-finanzas',
   donaciones: {
     /** Llave Bre-B (ej. "@tunombre", tu correo o tu celular). Sirve desde cualquier banco en Colombia. */
-    llaveBreB: '',
+    llaveBreB: '@jdg657',
     /** Número de Nequi (si prefieres no usar la llave). */
     nequi: '',
     /** https://ko-fi.com/tuusuario — pagos con tarjeta desde cualquier país. */
