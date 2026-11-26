@@ -101,6 +101,42 @@ export async function asegurarWebhookConBotones() {
   }
 }
 
+/** Datos del bot (para el asistente): su @usuario y nombre. null si el token no sirve. */
+export async function infoBot(): Promise<{ usuario: string; nombre: string } | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/getMe`, { signal: AbortSignal.timeout(8000) }).then((x) => x.json());
+    return r?.ok ? { usuario: String(r.result.username), nombre: String(r.result.first_name) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A dónde manda Telegram los mensajes del bot (y el último error, si hubo). */
+export async function infoWebhook(): Promise<{ url: string; error: string | null; pendientes: number } | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`, { signal: AbortSignal.timeout(8000) }).then((x) => x.json());
+    if (!r?.ok) return null;
+    return { url: String(r.result.url ?? ''), error: r.result.last_error_message ? String(r.result.last_error_message) : null, pendientes: Number(r.result.pending_update_count) || 0 };
+  } catch {
+    return null;
+  }
+}
+
+/** Conecta el bot con esta app: Telegram mandará los mensajes a <sitio>/api/telegram con el secreto. */
+export async function conectarWebhook(sitio: string): Promise<boolean> {
+  const secreto = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!process.env.TELEGRAM_BOT_TOKEN || !secreto) return false;
+  const r = await api('setWebhook', {
+    url: `${sitio.replace(/\/+$/, '')}/api/telegram`, secret_token: secreto, allowed_updates: ['message', 'edited_message', 'callback_query'],
+  });
+  webhookRevisado = true;
+  return Boolean(r?.ok);
+}
+
 /** Descarga un archivo que mandaron al bot (nota de voz, foto) y lo devuelve en base64. Máximo ~8 MB. */
 export async function descargarArchivo(fileId: string): Promise<{ base64: string; ruta: string } | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;

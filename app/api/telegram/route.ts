@@ -1,5 +1,6 @@
 import { manejarMensaje, procesarBoton, type Respuesta } from '@/lib/bot';
 import { leerMedio } from '@/lib/ia';
+import { chatDueno, reclamarConCodigo } from '@/lib/dueno';
 import { enviarResumenSemanal } from '@/lib/semanal';
 import { asegurarComandos, asegurarWebhookConBotones, descargarArchivo, editarMensaje, enviarConMenu, enviarMensaje, esc, responderBoton } from '@/lib/telegram';
 
@@ -59,12 +60,13 @@ export async function POST(req: Request) {
   // Para que lleguen los toques de los botones (se corrige solo, una vez).
   await asegurarWebhookConBotones();
   await asegurarComandos();
+  const dueno = await chatDueno();
 
   // Tocaron un botón (ej. "¿De dónde salió?" → Nu)
   const toque = update?.callback_query;
   if (toque) {
     const chat = toque.message?.chat?.id;
-    if (String(chat) !== String(process.env.TELEGRAM_CHAT_ID ?? '')) {
+    if (!dueno || String(chat) !== dueno) {
       await responderBoton(toque.id);
       return ok();
     }
@@ -84,10 +86,19 @@ export async function POST(req: Request) {
   const chatId = msg?.chat?.id;
   if (!msg || chatId == null) return ok();
 
-  // Solo tú puedes usar el bot. A cualquier otro solo le decimos su chat ID.
-  if (String(chatId) !== String(process.env.TELEGRAM_CHAT_ID ?? '')) {
-    if (typeof msg.text === 'string' && msg.text.startsWith('/start')) {
-      await enviarMensaje(chatId, `Tu chat ID es <code>${chatId}</code>. Ponlo en la variable TELEGRAM_CHAT_ID en Vercel y vuelve a desplegar.`);
+  // Solo el dueño puede usar el bot.
+  if (!dueno || String(chatId) !== dueno) {
+    const texto = typeof msg.text === 'string' ? msg.text.trim() : '';
+    if (!dueno) {
+      // Configuración inicial: el dueño manda "/start 4821" con el código que le muestra la app.
+      const codigo = texto.match(/^\/start(?:@\w+)?\s+(\d{4})$/)?.[1];
+      if (codigo && (await reclamarConCodigo(String(chatId), codigo))) {
+        await enviarConMenu(chatId, `🎉 <b>¡Listo! Este bot ya es tuyo.</b>\nVuelve a la página de Pilas para entrar con tu clave.\n\nPrueba escribiéndome un gasto: <code>almuerzo 15 mil</code>`);
+      } else if (texto.startsWith('/start')) {
+        await enviarMensaje(chatId, 'Este bot de Pilas todavía no está conectado. Abre tu Pilas en el navegador y sigue la <b>configuración inicial</b>: ahí te doy un código para mandarme.');
+      }
+    } else if (texto.startsWith('/start')) {
+      await enviarMensaje(chatId, 'Este es un bot personal de Pilas. Si quieres el tuyo, es gratis: busca "Pilas finanzas" en GitHub e instálalo en tu propia cuenta.');
     }
     return ok();
   }

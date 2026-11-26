@@ -6,6 +6,8 @@ import { bloqueo, cerrarSesion, claveCorrecta, crearSesion, enviarCodigo, regist
 import { asegurarEsquema } from '@/lib/esquema';
 import { quienEs } from '@/lib/guardia';
 import { hayLlaves, opcionesEntrada, verificarEntrada } from '@/lib/llaves';
+import { chatDueno, nuevoCodigoConexion } from '@/lib/dueno';
+import { conectarWebhook, infoBot } from '@/lib/telegram';
 import { COOKIE_DESAFIO, COOKIE_RETO, COOKIE_SESION, firmar, leerCookieSesion, leerReto, retoFirmado, verificar } from '@/lib/sesion';
 
 export type Estado = {
@@ -129,6 +131,62 @@ export async function conHuella(respuesta: unknown): Promise<{ error?: string }>
 export async function huellaActiva(): Promise<boolean> {
   await asegurarEsquema();
   return hayLlaves();
+}
+
+// ---------------------------------------------------------------------------
+// Configuración inicial: conectar Telegram sin copiar el chat ID ni redesplegar
+
+async function sitioActual() {
+  const { headers } = await import('next/headers');
+  const h = await headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+export type Variable = { nombre: string; ok: boolean; opcional?: boolean; ayuda: string };
+export type EstadoConfig =
+  | { necesita: false }
+  | { necesita: true; variables: Variable[]; bot: { usuario: string; nombre: string } | null; listo: boolean };
+
+/** Qué falta para usar Pilas. Solo da detalles mientras nadie ha conectado el bot. */
+export async function estadoConfiguracion(): Promise<EstadoConfig> {
+  if (await chatDueno()) return { necesita: false };
+  let baseOk = true;
+  try {
+    await asegurarEsquema();
+  } catch {
+    baseOk = false;
+  }
+  const bot = await infoBot();
+  const secreto = process.env.TELEGRAM_WEBHOOK_SECRET ?? '';
+  const variables: Variable[] = [
+    { nombre: 'DATABASE_URL', ok: baseOk, ayuda: 'Conecta Neon en Vercel → Storage y vuelve a desplegar.' },
+    { nombre: 'TELEGRAM_BOT_TOKEN', ok: !!bot, ayuda: 'El token que te dio @BotFather. Si ya está, revisa que esté completo.' },
+    { nombre: 'TELEGRAM_WEBHOOK_SECRET', ok: /^[A-Za-z0-9_-]{8,256}$/.test(secreto), ayuda: 'Una clave inventada de 8 o más letras, números, _ o - (sin espacios).' },
+    { nombre: 'DASHBOARD_PASSWORD', ok: !!process.env.DASHBOARD_PASSWORD, ayuda: 'La contraseña para entrar a Pilas.' },
+    { nombre: 'CRON_SECRET', ok: (process.env.CRON_SECRET ?? '').length >= 16, opcional: true, ayuda: 'Para los recordatorios diarios: 16 o más caracteres.' },
+    { nombre: 'IA (ej. GEMINI_API_KEY)', ok: !!(await import('@/lib/ia')).estadoIA().activa, opcional: true, ayuda: 'Opcional: notas de voz, fotos y preguntas. Gemini es gratis.' },
+  ];
+  return { necesita: true, variables, bot, listo: variables.every((v) => v.ok || v.opcional) };
+}
+
+/** Con tu clave: conecta el bot a esta app y da un código para mandarle (/start 4821). */
+export async function conectarTelegramInicial(clave: string): Promise<{ codigo?: string; bot?: { usuario: string; nombre: string }; error?: string }> {
+  if (await chatDueno()) return { error: 'Este Pilas ya está conectado. Recarga la página para entrar.' };
+  await asegurarEsquema();
+  const { ip, agente } = await quienEs();
+  const b = await bloqueo(ip);
+  if (b) return { error: textoBloqueo(b.hasta, b.global) };
+  if (!claveCorrecta(String(clave ?? '').slice(0, 200))) {
+    const quedan = await registrarIntento(ip, 'clave', false, agente);
+    return { error: quedan > 0 ? `Clave incorrecta. Te ${quedan === 1 ? 'queda 1 intento' : `quedan ${quedan} intentos`}.` : 'Demasiados intentos. Espera 15 minutos.' };
+  }
+  await registrarIntento(ip, 'clave', true, agente);
+  const bot = await infoBot();
+  if (!bot) return { error: 'El token del bot no funciona. Revisa TELEGRAM_BOT_TOKEN en Vercel.' };
+  if (!(await conectarWebhook(await sitioActual()))) return { error: 'Telegram no aceptó la conexión. Revisa TELEGRAM_WEBHOOK_SECRET (solo letras, números, _ y -).' };
+  return { codigo: await nuevoCodigoConexion(), bot };
 }
 
 /** Volver al paso de la clave (por ejemplo, para pedir otro código). */

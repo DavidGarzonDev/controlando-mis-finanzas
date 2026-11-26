@@ -12,7 +12,7 @@ Proyecto abierto y **gratis**: cualquiera puede montar su propia versión siguie
 
 [![Desplegar en Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FDavidGarzonDev%2Fcontrolando-mis-finanzas&project-name=pilas&repository-name=pilas&env=TELEGRAM_BOT_TOKEN,TELEGRAM_WEBHOOK_SECRET,DASHBOARD_PASSWORD,CRON_SECRET&envDescription=Token%20del%20bot%2C%20un%20secreto%20para%20el%20webhook%2C%20tu%20contrase%C3%B1a%20y%20un%20secreto%20para%20los%20recordatorios&envLink=https%3A%2F%2Fgithub.com%2FDavidGarzonDev%2Fcontrolando-mis-finanzas%23paso-4--desplegar-en-vercel)
 
-El botón copia el proyecto a tu GitHub y lo despliega en tu Vercel. Igual sigue los pasos 1, 2, 5, 6 y 7.
+El botón copia el proyecto a tu GitHub y lo despliega en tu Vercel. Igual sigue los pasos 1, 2, 5 y 6.
 
 ## ❤️ Apoya el proyecto
 
@@ -67,7 +67,6 @@ Para Gemini gratis: en Google AI Studio → **Claves de API** → *Crear clave d
    |---|---|
    | `TELEGRAM_BOT_TOKEN` | el token de BotFather |
    | `TELEGRAM_WEBHOOK_SECRET` | una clave inventada por ti, solo letras, números, `_` y `-` (ej. `finanzas_9x2k7q`) |
-   | `TELEGRAM_CHAT_ID` | déjalo vacío por ahora (paso 7) |
    | `GEMINI_API_KEY` | tu clave de Gemini (o la de otro proveedor, paso 2) |
    | `DASHBOARD_PASSWORD` | la contraseña para abrir tu dashboard |
    | `CRON_SECRET` | otra clave inventada (mínimo 16 caracteres), para los recordatorios diarios por Telegram |
@@ -83,24 +82,17 @@ Para Gemini gratis: en Google AI Studio → **Claves de API** → *Crear clave d
 3. Listo: **la app crea las tablas sola** la primera vez que abres el dashboard o le escribes al bot (y las actualiza cuando hay versiones nuevas). Si prefieres, también puedes pegar `db/schema.sql` en el **SQL Editor** de Neon.
 4. (Opcional) Copia `db/seed.example.sql` como `db/seed.sql`, pon tus deudas y gastos fijos, y ejecútalo en el SQL Editor. O cárgalos desde el dashboard. (`db/seed.sql` no se sube a GitHub.)
 
-## Paso 6 — Conectar Telegram con tu app (webhook)
+## Paso 6 — Conectar Telegram (desde la app, 1 minuto)
 
-Abre esta URL en el navegador, reemplazando los tres valores:
+1. Abre `https://TU-APP.vercel.app`. La primera vez aparece **Configuremos tu Pilas**:
+   - revisa que las variables estén bien (te dice cuál falta y cómo arreglarla),
+   - escribe tu `DASHBOARD_PASSWORD` y toca **Conectar con Telegram** (conecta el bot con tu app solo),
+   - toca **Abrir Telegram y mandarlo**: le envía a tu bot `/start` con un código de 4 números.
+2. Listo: ese chat queda como el dueño y ya puedes entrar con tu clave + el código que te llega a Telegram.
 
-```
-https://api.telegram.org/botTU_TOKEN/setWebhook?url=https://TU-APP.vercel.app/api/telegram&secret_token=TU_WEBHOOK_SECRET&allowed_updates=["message"]
-```
+No hay que copiar el chat ID ni volver a desplegar. (Si prefieres hacerlo a mano como antes, la variable `TELEGRAM_CHAT_ID` sigue funcionando y tiene prioridad.)
 
-Debe responder `"ok":true` y `"Webhook was set"`.
-
-## Paso 7 — Decirle al bot que eres tú
-
-1. Escríbele `/start` a tu bot. Te responde con tu **chat ID**.
-2. En Vercel → Settings → Environment Variables → pon ese número en `TELEGRAM_CHAT_ID`.
-3. **Redeploy** otra vez.
-4. Escríbele `/start` de nuevo: ahora te muestra la ayuda. ¡Listo!
-
-Solo tu chat ID puede registrar gastos. Si alguien más encuentra el bot, no puede hacer nada.
+Solo tu chat puede registrar gastos. Si alguien más encuentra el bot, no puede hacer nada.
 
 ---
 

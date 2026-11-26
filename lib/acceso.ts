@@ -1,5 +1,6 @@
 import { randomInt, timingSafeEqual, createHash } from 'node:crypto';
 import { sql } from './db';
+import { chatDueno } from './dueno';
 import { enviarMensaje, esc } from './telegram';
 import { aleatorio, huella } from './sesion';
 
@@ -26,7 +27,7 @@ export const DIAS_RECORDAR = 30;
 const n = (v: unknown) => Number(v) || 0;
 
 async function avisar(texto: string) {
-  const chat = process.env.TELEGRAM_CHAT_ID;
+  const chat = await chatDueno();
   if (!chat) return false;
   try {
     return await enviarMensaje(chat, texto);
@@ -108,7 +109,7 @@ export async function enviarCodigo(ip: string, recordar: boolean, agente: string
     `🔐 Tu código para entrar a <b>Pilas</b>:\n\n<code>${codigo}</code>\n\nVence en ${CODIGO_MIN} minutos. ` +
       `Pedido desde ${esc(dispositivo(agente))} (IP ${esc(ip)}).\n\n⚠️ Si no fuiste tú, alguien tiene tu clave: no compartas este código y cámbiala en Vercel.`,
   );
-  if (!ok) return { error: 'No pude mandarte el código por Telegram. Revisa TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en Vercel.' };
+  if (!ok) return { error: 'No pude mandarte el código por Telegram. Revisa TELEGRAM_BOT_TOKEN en Vercel y que el bot esté conectado.' };
   return { id };
 }
 

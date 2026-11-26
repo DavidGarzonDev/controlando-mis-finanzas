@@ -230,6 +230,22 @@ export async function datosAnio(anio: number) {
   return db.resumenAnio(Math.max(2020, Math.min(2100, Math.round(Number(anio)) || new Date().getFullYear())));
 }
 
+/** Estado de Telegram (para Conexiones): el bot, a dónde le llegan los mensajes y si hay errores. */
+export async function estadoTelegram() {
+  await listo();
+  const { infoBot, infoWebhook } = await import('@/lib/telegram');
+  const { chatDesdeVercel } = await import('@/lib/dueno');
+  const [bot, webhook, sitio] = await Promise.all([infoBot(), infoWebhook(), origen()]);
+  const esperado = `${sitio}/api/telegram`;
+  return { bot, webhookOk: webhook?.url === esperado && !webhook?.error, webhook, esperado, desdeVercel: chatDesdeVercel() };
+}
+/** Vuelve a conectar el bot con esta app (por si cambiaste de dominio o algo falló). */
+export async function reconectarTelegram() {
+  await listo();
+  const { conectarWebhook } = await import('@/lib/telegram');
+  return conectarWebhook(await origen());
+}
+
 /** Qué IA está activa (para Conexiones). No expone la clave. */
 export async function estadoDeLaIA() {
   await listo();
@@ -294,7 +310,7 @@ export async function guardarNuevaLlave(respuesta: unknown, nombre: string) {
   try {
     const ok = await guardarRegistro(respuesta as Parameters<typeof guardarRegistro>[0], reto, nombre);
     if (ok) {
-      const chat = process.env.TELEGRAM_CHAT_ID;
+      const chat = await (await import('@/lib/dueno')).chatDueno();
       if (chat) {
         const { enviarMensaje, esc } = await import('@/lib/telegram');
         await enviarMensaje(chat, `🔑 Activaste la entrada con huella/Face ID en <b>${esc(nombre || 'un dispositivo')}</b>.
@@ -386,7 +402,7 @@ export async function registrarTexto(texto: string): Promise<{ html: string; bot
   const r = await manejarMensaje(texto.slice(0, 300));
   refrescar();
   if (typeof r !== 'string' && r.semana) {
-    const chat = process.env.TELEGRAM_CHAT_ID;
+    const chat = await (await import('@/lib/dueno')).chatDueno();
     const { enviarResumenSemanal } = await import('@/lib/semanal');
     const ok = chat ? await enviarResumenSemanal(chat) : false;
     return { html: ok ? 'Te mandé el resumen de la semana a Telegram.' : 'No pude mandarlo a Telegram.', botones: [] };

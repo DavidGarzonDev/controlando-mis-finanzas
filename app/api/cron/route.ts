@@ -2,6 +2,7 @@ import { asegurarEsquema } from '@/lib/esquema';
 import { marcarSemana, registrarPatrimonio } from '@/lib/datos';
 import { enviarResumenSemanal } from '@/lib/semanal';
 import { enviarPush, sinHtml } from '@/lib/push';
+import { chatDueno } from '@/lib/dueno';
 import { marcarEnviado, mensajeDelDia } from '@/lib/recordatorios';
 import { enviarMensaje } from '@/lib/telegram';
 
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
   await asegurarEsquema();
   await registrarPatrimonio();
 
-  const chat = process.env.TELEGRAM_CHAT_ID;
+  const chat = await chatDueno();
 
   // Domingo: resumen de la semana con imagen (una vez por semana)
   const domingo = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short' }).format(new Date()) === 'Sun';
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
   }
 
   const mensaje = await mensajeDelDia();
-  if (!chat || !mensaje) return Response.json({ enviado: false, semanal, motivo: !chat ? 'sin TELEGRAM_CHAT_ID' : 'nada que avisar' });
+  if (!chat || !mensaje) return Response.json({ enviado: false, semanal, motivo: !chat ? 'sin dueño de Telegram' : 'nada que avisar' });
   if (!(await marcarEnviado())) return Response.json({ enviado: false, motivo: 'ya se envió hoy' });
 
   await enviarMensaje(chat, mensaje);

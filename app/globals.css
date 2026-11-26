@@ -2778,3 +2778,27 @@ html, body { overflow-x: clip; }
 .te-deben-ico { background: var(--verde-suave) !important; color: var(--verde) !important; }
 .te-deben-pagados summary { cursor: pointer; color: var(--tinta-3); font-weight: 650; font-size: 0.88rem; }
 .btn.es-prestamo { justify-self: start; align-self: flex-start; color: var(--verde); border-color: color-mix(in srgb, var(--verde) 35%, transparent); }
+
+/* Configuración inicial (asistente de Telegram) */
+.entrar-caja.configurar { width: min(520px, 100%); }
+.config-pasos { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.config-pasos > li { display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: rgb(255 255 255 / 0.04); border: 1px solid var(--e-linea); }
+.config-pasos > li.activo { border-color: rgb(139 156 255 / 0.5); background: rgb(139 156 255 / 0.07); }
+.config-pasos > li.hecho > b::after { content: ' ✓'; color: #6ee7a8; }
+.config-pasos > li.bloqueado { opacity: 0.45; }
+.config-vars { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.config-vars li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.86rem; }
+.config-vars li svg { flex: none; margin-top: 2px; }
+.config-vars li.ok svg { color: #6ee7a8; }
+.config-vars li.falta svg { color: #ff8a98; }
+.config-vars li.opcional svg { color: #ffc46b; }
+.config-vars li span { display: grid; }
+.config-vars code { background: rgb(255 255 255 / 0.07); border: 0; color: var(--e-tinta); }
+.config-vars small { color: var(--e-tinta-2); font-size: 0.78rem; }
+.config-nota { display: flex; gap: 8px; align-items: center; color: var(--e-tinta-2); font-size: 0.84rem; }
+.config-bot { color: var(--e-acento); font-weight: 650; }
+.config-codigo { display: grid; gap: 12px; }
+.config-comando { justify-self: start; font-size: 1.4rem; padding: 10px 16px; border-radius: 12px; background: rgb(255 255 255 / 0.08); border: 1px solid var(--e-linea); color: #fff; letter-spacing: 0.04em; }
+.config-listo { font-weight: 700; color: #6ee7a8; }
+a.entrar-btn { text-decoration: none; }
+.config-vars code { justify-self: start; }

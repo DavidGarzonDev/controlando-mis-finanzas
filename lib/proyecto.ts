@@ -16,6 +16,11 @@ export const PROYECTO = {
     paypal: '',
     /** https://github.com/sponsors/tuusuario */
     githubSponsors: '',
+    /** Binance Pay ID (un número; está en Binance → Perfil → Pay ID). Gratis y al instante entre usuarios de Binance. */
+    binancePayId: '',
+    /** Dirección para recibir USDT desde cualquier exchange o billetera. Pon también la red (ej. "TRC20" o "BEP20"). */
+    usdtDireccion: '',
+    usdtRed: '',
   },
 };
 
@@ -29,6 +34,8 @@ export function metodosDonacion(): MetodoDonacion[] {
   if (d.nequi) m.push({ id: 'nequi', nombre: 'Nequi', valor: d.nequi, enlace: null, copiar: true });
   if (d.kofi) m.push({ id: 'kofi', nombre: 'Ko-fi', valor: d.kofi.replace(/^https?:\/\//, ''), enlace: d.kofi, copiar: false });
   if (d.paypal) m.push({ id: 'paypal', nombre: 'PayPal', valor: d.paypal.replace(/^https?:\/\//, ''), enlace: d.paypal, copiar: false });
+  if (d.binancePayId) m.push({ id: 'binance', nombre: 'Binance Pay ID', valor: d.binancePayId, enlace: null, copiar: true });
+  if (d.usdtDireccion) m.push({ id: 'usdt', nombre: `USDT${d.usdtRed ? ` (red ${d.usdtRed}, no otra)` : ''}`, valor: d.usdtDireccion, enlace: null, copiar: true });
   if (d.githubSponsors) m.push({ id: 'github', nombre: 'GitHub Sponsors', valor: d.githubSponsors.replace(/^https?:\/\//, ''), enlace: d.githubSponsors, copiar: false });
   return m;
 }

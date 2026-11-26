@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
-import { Bell, BellOff, Bot, Fingerprint, Plug, Trash2 } from 'lucide-react';
+import { Bell, BellOff, Bot, Fingerprint, Plug, Send, Trash2 } from 'lucide-react';
 import {
-  activarPush, desactivarPush, dispositivosPush, estadoDeLaIA, guardarNuevaLlave, listaLlaves, llavePush, opcionesNuevaLlave, probarIA, quitarLlave,
+  activarPush, desactivarPush, dispositivosPush, estadoDeLaIA, estadoTelegram, reconectarTelegram, guardarNuevaLlave, listaLlaves, llavePush, opcionesNuevaLlave, probarIA, quitarLlave,
 } from '@/app/actions';
 
 type Avisar = (m: string) => void;
@@ -26,6 +26,7 @@ export function Conexiones({ avisar }: { avisar: Avisar }) {
         </div>
       </div>
       <div className="conexiones-grid">
+        <TarjetaTelegram />
         <TarjetaIA />
         <Huella avisar={avisar} />
         <Notificaciones avisar={avisar} />
@@ -222,6 +223,48 @@ function TarjetaIA() {
         <p className="nota">No hay IA configurada. El bot funciona igual con su intérprete propio. Para activarla, agrega en Vercel <code>GEMINI_API_KEY</code> (gratis en aistudio.google.com) o la de tu proveedor; mira el README.</p>
       )}
       <p className="sub">Para cambiarla: <code>IA_PROVEEDOR</code> (gemini, claude, openai, groq, openrouter, deepseek) e <code>IA_MODELO</code> en las variables de Vercel.</p>
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** El bot de Telegram: si está conectado a esta app, y un botón para reconectarlo. */
+function TarjetaTelegram() {
+  const [e, setE] = useState<Awaited<ReturnType<typeof estadoTelegram>> | null>(null);
+  const [pendiente, iniciar] = useTransition();
+  const [msg, setMsg] = useState('');
+  const cargar = () => estadoTelegram().then(setE).catch(() => {});
+  useEffect(() => { cargar(); }, []);
+  return (
+    <article className="conexion">
+      <header className="conexion-cab">
+        <span className="conexion-ico azul" aria-hidden><Send size={20} /></span>
+        <div>
+          <h3>Bot de Telegram</h3>
+          <p>Por donde registras gastos, recibes el código para entrar y los recordatorios.</p>
+        </div>
+      </header>
+      {!e ? (
+        <p className="nota">Revisando…</p>
+      ) : (
+        <>
+          <p className="ia-estado">
+            {e.bot ? <><b>@{e.bot.usuario}</b> · </> : <b className="neg">El token no funciona · </b>}
+            {e.webhookOk ? <span className="pos">conectado a esta app ✓</span> : <span className="neg">no está recibiendo mensajes aquí</span>}
+          </p>
+          {e.webhook?.error && <p className="error">Último error de Telegram: {e.webhook.error}</p>}
+          {(!e.webhookOk || e.webhook?.error) && (
+            <button className="btn chico" disabled={pendiente} onClick={() => iniciar(async () => {
+              const ok = await reconectarTelegram();
+              setMsg(ok ? 'Listo, reconectado.' : 'Telegram no aceptó la conexión. Revisa las variables del bot en Vercel.');
+              cargar();
+            })}>{pendiente ? 'Conectando…' : 'Reconectar'}</button>
+          )}
+          {msg && <p className="nota">{msg}</p>}
+          {e.bot && <a className="btn chico" href={`https://t.me/${e.bot.usuario}`} target="_blank" rel="noopener noreferrer">Abrir el bot</a>}
+        </>
+      )}
     </article>
   );
 }
