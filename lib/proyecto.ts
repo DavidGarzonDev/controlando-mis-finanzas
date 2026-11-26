@@ -5,6 +5,7 @@
 export const PROYECTO = {
   nombre: 'Pilas',
   repo: 'https://github.com/DavidGarzonDev/controlando-mis-finanzas',
+  licencia: 'AGPL-3.0',
   donaciones: {
     /** Llave Bre-B (ej. "@tunombre", tu correo o tu celular). Sirve desde cualquier banco en Colombia. */
     llaveBreB: '@jdg657',

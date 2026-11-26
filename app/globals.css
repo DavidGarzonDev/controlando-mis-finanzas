@@ -2802,3 +2802,8 @@ html, body { overflow-x: clip; }
 .config-listo { font-weight: 700; color: #6ee7a8; }
 a.entrar-btn { text-decoration: none; }
 .config-vars code { justify-self: start; }
+
+.lateral-codigo { color: rgb(226 232 250 / 0.45); font-size: 0.74rem; padding: 0 4px; text-decoration: none; }
+.lateral-codigo:hover { color: rgb(226 232 250 / 0.8); text-decoration: underline; }
+.entrar-codigo { order: 10; text-align: center; margin-top: 14px; font-size: 0.76rem; }
+.entrar-codigo a { color: var(--e-tinta-2); }

@@ -23,6 +23,7 @@ import { BotonPrivado, BotonTema } from './Tema';
 import { Modal, type Editor } from './Modal';
 import { Paleta } from './Paleta';
 import { Sincronizar } from './Sincronizar';
+import { PROYECTO } from '@/lib/proyecto';
 import { confeti } from './Celebrar';
 import { Historias } from './Historias';
 import { AnioEnPilas } from './AnioEnPilas';
@@ -218,6 +219,7 @@ export default function App(p: Props) {
           <form action={salir} className="solo-escritorio">
             <button className="salir"><LogOut size={16} aria-hidden /> Cerrar sesión</button>
           </form>
+          <a className="lateral-codigo solo-escritorio" href={PROYECTO.repo} target="_blank" rel="noopener noreferrer">Código fuente · {PROYECTO.licencia}</a>
           <p className="lateral-tip solo-escritorio">
             <Send size={14} aria-hidden /> También por Telegram: <code>almuerzo 15 mil</code>
           </p>

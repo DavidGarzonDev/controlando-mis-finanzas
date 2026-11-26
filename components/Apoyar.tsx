@@ -45,6 +45,10 @@ export function Apoyar() {
       <a className="btn" href={PROYECTO.repo} target="_blank" rel="noopener noreferrer">
         <Star size={16} aria-hidden /> Dale una estrella en GitHub
       </a>
+      <p className="sub">
+        Software libre bajo licencia <a href={`${PROYECTO.repo}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer">{PROYECTO.licencia}</a>:
+        puedes ver, usar y mejorar el <a href={PROYECTO.repo} target="_blank" rel="noopener noreferrer">código fuente</a>.
+      </p>
     </section>
   );
 }

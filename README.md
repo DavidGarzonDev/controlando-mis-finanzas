@@ -251,3 +251,9 @@ db/seed.example.sql        → datos de ejemplo (plantilla)
 - **El bot no responde:** abre `https://api.telegram.org/botTU_TOKEN/getWebhookInfo` y mira `last_error_message`. En Vercel → Logs ves los errores del servidor.
 - **"Falta DATABASE_URL":** conecta Neon (paso 5) y haz Redeploy.
 - **El bot dice que la IA llegó a su límite:** los planes gratis (como el de Gemini) se reinician cada día. Mientras tanto, escribe los gastos con monto claro (`almuerzo 15000`) y se registran igual.
+
+## Licencia
+
+Pilas es **software libre** bajo la licencia **[GNU AGPL-3.0](LICENSE)** · © 2026 [DavidGarzonDev](https://github.com/DavidGarzonDev).
+
+En pocas palabras: puedes usarla gratis, instalarla, estudiarla y modificarla. Si la modificas y la ofreces a otras personas (incluso como página web o servicio), tienes que publicar tu código con la misma licencia y dar el crédito. Así nadie puede cerrarla ni venderla como si fuera suya.

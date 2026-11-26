@@ -81,6 +81,9 @@ export default function Entrar({ conHuella = false }: { conHuella?: boolean }) {
           />
         )}
 
+        <p className="entrar-codigo">
+          <a href="https://github.com/DavidGarzonDev/controlando-mis-finanzas" target="_blank" rel="noopener noreferrer">Pilas es software libre (AGPL-3.0) · código fuente</a>
+        </p>
         <p className="entrar-seguro">
           <ShieldCheck size={15} aria-hidden /> Protegido con clave + código. Tras 5 intentos fallidos se bloquea y te aviso por Telegram.
         </p>
