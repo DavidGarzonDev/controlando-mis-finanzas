@@ -27,6 +27,8 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, prestamos, hoyCl
   const [volteada, setVolteada] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
   const pedirGiro = useGiroscopio(raiz);
+  const teDeben = prestamos.reduce((s, p) => s + p.pendiente, 0);
+  const patrimonioHoy = enCuentas + teDeben - total;
   const cupoTotal = tarjetas.reduce((s, t) => s + (t.cupo ?? 0), 0);
   const usadoTotal = tarjetas.reduce((s, t) => s + (t.cupo ? t.saldo : 0), 0);
 
@@ -46,9 +48,9 @@ export function Creditos({ deudas, cuentas, r, mov, patrimonio, prestamos, hoyCl
         <div className="bloque-cab">
           <div>
             <h2 id="t-patrimonio"><TrendingUp size={18} aria-hidden className="ico-titulo" /> Tu patrimonio</h2>
-            <p className="sub">Lo que tienes (cuentas + metas + lo que te deben) menos lo que debes</p>
+            <p className="sub">Lo que tienes en cuentas (metas incluidas) más lo que te deben, menos lo que debes</p>
           </div>
-          <b className={`patrimonio-cifra num ${enCuentas - total < 0 ? 'neg' : ''}`}><Contador valor={enCuentas - total} /></b>
+          <b className={`patrimonio-cifra num ${patrimonioHoy < 0 ? 'neg' : ''}`}><Contador valor={patrimonioHoy} /></b>
         </div>
         {patrimonio.length >= 2 ? (
           <CurvaPatrimonio puntos={patrimonio} />

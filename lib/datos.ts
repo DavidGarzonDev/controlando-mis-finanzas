@@ -568,8 +568,8 @@ export async function registrarPatrimonio() {
   await sql().query(
     `INSERT INTO patrimonio_diario (fecha, activos, deudas)
      SELECT (now() AT TIME ZONE '${ZONA}')::date,
-            (SELECT COALESCE(SUM(saldo), 0) FROM cuentas) + (SELECT COALESCE(SUM(monto), 0) FROM aportes_meta)
-              + (SELECT COALESCE(SUM(pendiente), 0) FROM prestamos),
+            -- Lo apartado para metas sigue dentro de tus cuentas: no se suma otra vez
+            (SELECT COALESCE(SUM(saldo), 0) FROM cuentas) + (SELECT COALESCE(SUM(pendiente), 0) FROM prestamos),
             (SELECT COALESCE(SUM(saldo), 0) FROM deudas)
      ON CONFLICT (fecha) DO UPDATE SET activos = EXCLUDED.activos, deudas = EXCLUDED.deudas`,
   );

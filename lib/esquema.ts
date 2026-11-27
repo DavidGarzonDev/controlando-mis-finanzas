@@ -45,8 +45,6 @@ const SENTENCIAS = [
   // Pagar un fijo puede descontarlo de una cuenta (y se devuelve si lo desmarcas)
   `ALTER TABLE pagos_fijos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
   `ALTER TABLE pagos_fijos ADD COLUMN IF NOT EXISTS monto INTEGER`,
-  // Cuenta dividida ("la vaca"): los préstamos que salen de un gasto
-  `ALTER TABLE prestamos ADD COLUMN IF NOT EXISTS gasto_id INTEGER`,
   // De qué cuenta sale o entra cada movimiento
   `ALTER TABLE gastos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
   `ALTER TABLE ingresos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
@@ -136,6 +134,8 @@ const SENTENCIAS = [
     id SERIAL PRIMARY KEY, fecha TIMESTAMPTZ NOT NULL DEFAULT now(),
     prestamo_id INTEGER NOT NULL REFERENCES prestamos(id) ON DELETE CASCADE,
     monto INTEGER NOT NULL CHECK (monto > 0), cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL)`,
+  // Cuenta dividida ("la vaca"): los préstamos que salen de un gasto
+  `ALTER TABLE prestamos ADD COLUMN IF NOT EXISTS gasto_id INTEGER`,
   // Categorías que crea el usuario, con su emoji y color
   `CREATE TABLE IF NOT EXISTS categorias_propias (
     nombre TEXT PRIMARY KEY, emoji TEXT, color TEXT, creada TIMESTAMPTZ NOT NULL DEFAULT now())`,
