@@ -1,5 +1,5 @@
 import { CATEGORIAS, conEmoji, normalizarCategoria, sinTildes } from './categorias';
-import { barra, tarjetaGasto, tarjetaIngreso, textoCategorias } from './mensajes';
+import { barra, filas, tarjetaGasto, tarjetaIngreso, textoCategorias } from './mensajes';
 import { pareceNotificacion } from './notificaciones';
 import { alertasGasto } from './alertas';
 import { esPregunta } from './preguntas';
@@ -20,6 +20,10 @@ Escríbeme el gasto como te salga:
 • <code>almuerzo 15 mil</code>
 • <code>gasolina 40k</code>
 • <code>salida con mi novia 70000</code>
+
+¿Pagaste la cuenta de varios? Divídela y lo de los demás queda en <b>Te deben</b>:
+• <code>almuerzo 60 mil entre 3</code>
+• <code>cena 120 mil dividido entre juan, ana y yo</code> · <code>taxi 18 mil a medias con laura</code>
 
 Y lo que te entra, venga de donde venga:
 • <code>me pagaron 1.100.000</code>
@@ -285,7 +289,35 @@ export async function manejarMensaje(textoCrudo: string): Promise<Respuesta> {
   return registrar(texto);
 }
 
-async function registrar(textoOriginal: string): Promise<Respuesta> {
+const NUMEROS: Record<string, number> = { dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+const YO = /^(yo|m[ií]|mi|conmigo|el que escribe)$/i;
+
+/**
+ * La parte del mensaje que dice que la cuenta se divide, para quitarla antes de registrar:
+ *  "almuerzo 60 mil entre 3", "cena 120 mil dividido entre juan, ana y yo", "taxi 18 mil a medias con laura".
+ */
+export function sacarDivision(texto: string): { resto: string; personas: number; nombres: string[] } | null {
+  const num = texto.match(/[\s,]+(?:(?:dividid[oa]s?|partid[oa]s?|la vaca|vaca)\s+)?entre\s+(\d{1,2}|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)(?:\s+personas)?\s*$/i);
+  if (num) {
+    const personas = Number(num[1]) || NUMEROS[num[1].toLowerCase()];
+    return personas >= 2 ? { resto: texto.slice(0, num.index).trim(), personas, nombres: [] } : null;
+  }
+  const medias = texto.match(/[\s,]+(?:a medias|mitad y mitad|mitad)\s*$/i);
+  if (medias) return { resto: texto.slice(0, medias.index).trim(), personas: 2, nombres: [] };
+  const con = texto.match(/[\s,]+(?:(?:dividid[oa]s?|partid[oa]s?)\s+(?:entre|con)|(?:a medias|mitad y mitad|la vaca|vaca)\s+con)\s+(.+)$/i);
+  if (!con) return null;
+  const nombres = con[1]
+    .split(/\s*,\s*|\s+y\s+|\s+e\s+/i)
+    .map((x) => x.replace(/^(mi|el|la)\s+/i, (p) => (/^mi\s/i.test(p) ? 'mi ' : '')).trim())
+    .filter((x) => x && !YO.test(x) && !/\d/.test(x))
+    .map((x) => x[0].toUpperCase() + x.slice(1));
+  if (!nombres.length || nombres.length > 20) return null;
+  return { resto: texto.slice(0, con.index).trim(), personas: nombres.length + 1, nombres };
+}
+
+async function registrar(textoCompleto: string): Promise<Respuesta> {
+  const division = sacarDivision(textoCompleto);
+  const textoOriginal = division?.resto || textoCompleto;
   // "almuerzo 15 mil con nequi": la cuenta se quita del texto y el gasto sale de esa cuenta.
   // "en monedas" o "en billetes" también es efectivo.
   const esEfectivo = /\b(efectivo|cash|monedas?|billetes?)\b/i.test(textoOriginal);
@@ -342,8 +374,9 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
   }
 
   const categoria = dato.categoria ?? 'Otros';
-  const idGasto = await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoOriginal, cuentaId });
+  const idGasto = await db.insertarGasto({ concepto: dato.concepto, monto: dato.monto, categoria, origen: 'telegram', texto: textoCompleto, cuentaId });
   if (otroMonto) await db.guardarDuda('gasto', idGasto, otroMonto);
+  if (division && !otroMonto) await db.dividirGasto(idGasto, division.personas, division.nombres);
   const extra: string[] = [];
   const nuevo = await db.gastoPorId(idGasto);
   if (nuevo) extra.push(...(await alertasGasto(nuevo)));
@@ -370,9 +403,10 @@ async function registrar(textoOriginal: string): Promise<Respuesta> {
  */
 export async function procesarBoton(dato: string): Promise<{ aviso: string; texto?: string; botones?: Boton[][] }> {
   await asegurarEsquema();
-  const tarjeta = async (tipo: string, id: number, abierto: 'categoria' | 'cuenta' | null = null) =>
-    tipo === 'g' ? tarjetaGasto(id, { abierto }) : tarjetaIngreso(id, { abierto: abierto === 'categoria' ? null : abierto });
-  const conTarjeta = async (aviso: string, tipo: string, id: number, abierto: 'categoria' | 'cuenta' | null = null) => {
+  type Abierto = 'categoria' | 'cuenta' | 'dividir' | null;
+  const tarjeta = async (tipo: string, id: number, abierto: Abierto = null) =>
+    tipo === 'g' ? tarjetaGasto(id, { abierto }) : tarjetaIngreso(id, { abierto: abierto === 'cuenta' ? 'cuenta' : null });
+  const conTarjeta = async (aviso: string, tipo: string, id: number, abierto: Abierto = null) => {
     const t = await tarjeta(tipo, id, abierto);
     return t ? { aviso, texto: t.texto, botones: t.botones } : { aviso: 'Ese movimiento ya no existe.', texto: '<i>Este movimiento ya no existe.</i>', botones: [] };
   };
@@ -405,6 +439,13 @@ export async function procesarBoton(dato: string): Promise<{ aviso: string; text
     const r = await cambiarCategoria(Number(m[1]), m[2]);
     return conTarjeta(r ?? 'No encontré esa categoría', 'g', Number(m[1]));
   }
+  m = dato.match(/^dv:(\d+)$/);
+  if (m) return conTarjeta('¿Entre cuántos?', 'g', Number(m[1]), 'dividir');
+  m = dato.match(/^dv:(\d+):(\d+)$/);
+  if (m) {
+    const r = await db.dividirGasto(Number(m[1]), Number(m[2]));
+    return conTarjeta(r ? `Te deben ${pesos(r.teDeben)}` : 'Ya estaba dividida', 'g', Number(m[1]));
+  }
   m = dato.match(/^dp:(\d+)$/);
   if (m) {
     await db.borrarPrestamo(Number(m[1]));
@@ -422,6 +463,20 @@ export async function procesarBoton(dato: string): Promise<{ aviso: string; text
       botones: [[{ texto: 'Deshacer', dato: `dp:${p.id}` }]],
     };
   }
+  // Pago de un fijo o de una cuota: de qué cuenta salió
+  m = dato.match(/^(pf|pa):(\d+):(\d+)$/);
+  if (m) {
+    const ok = m[1] === 'pf' ? await db.cuentaPagoFijo(Number(m[2]), Number(m[3])) : await db.cuentaAbono(Number(m[2]), Number(m[3]));
+    const c = (await db.cuentas()).find((x) => x.id === Number(m![3]));
+    if (!ok) return { aviso: 'Ya estaba descontado', texto: '<i>Ese pago ya tenía cuenta (o lo desmarcaste).</i>', botones: [] };
+    const r = await db.resumen();
+    return {
+      aviso: `Salió de ${c?.nombre ?? 'la cuenta'}`,
+      texto: `✓ Pago registrado. Salió de <b>${esc(c?.nombre ?? '')}</b> · queda ${pesos(c?.saldo ?? 0)}\nLibre en el mes: <b>${pesos(r.disponible)}</b>`,
+      botones: [],
+    };
+  }
+  if (dato === 'nd') return { aviso: 'Listo, no lo descuento', texto: '✓ Quedó pagado. No lo descuento de ninguna cuenta.', botones: [] };
   m = dato.match(/^pp:(\d+):(\d+):(\d+)$/);
   if (m) return { aviso: 'Listo', texto: await textoCobro(Number(m[1]), Number(m[2]), Number(m[3])), botones: [] };
   m = dato.match(/^ep:(\d+)$/);
@@ -616,24 +671,35 @@ async function abonar(args: string, tipo: 'cuota' | 'capital' = 'cuota'): Promis
     : `Abono de ${pesos(m.monto)} a <b>${esc(d.nombre)}</b>. Saldo nuevo: <b>${pesos(d.saldo)}</b>${deDonde}`;
 }
 
-async function marcarPagado(args: string): Promise<string> {
+/**
+ * "/pague arriendo": marca el fijo (o la cuota) del mes como pagado. Si tienes cuentas, pregunta con botones
+ * de cuál salió, para que el saldo baje y "libre" no quede inflado.
+ */
+async function marcarPagado(args: string, preguntarCuenta = true): Promise<Respuesta> {
   const nombre = args.trim();
   if (!nombre) return 'Dime qué pagaste, por ejemplo <code>/pague gimnasio</code> o <code>/pague nu</code>.';
-  const [fs, ds] = await Promise.all([db.fijos(), db.deudas()]);
+  const [fs, ds, cs] = await Promise.all([db.fijos(), db.deudas(), db.cuentas()]);
   const f = mejor(fs, (x) => x.concepto, nombre);
   const d = mejor(ds.filter((x) => x.saldo > 0), (x) => x.nombre, nombre);
+  const conCuentas = (texto: string, dato: (c: db.Cuenta) => string): Respuesta =>
+    preguntarCuenta && cs.length
+      ? { texto: `${texto}
+
+¿De qué cuenta salió?`, botones: [...filas(cs.slice(0, 9).map((c) => ({ texto: c.nombre, dato: dato(c) })), 3), [{ texto: 'No descontar', dato: 'nd' }]] }
+      : texto;
   if (f && (!d || f.puntos >= d.puntos)) {
     const fijo = f.item;
     if (fijo.pagadoMes) return `<b>${esc(fijo.concepto)}</b> ya estaba marcado como pagado este mes.`;
     await db.marcarFijo(fijo.id, true);
-    return `✓ <b>${esc(fijo.concepto)}</b> (${pesos(fijo.monto)}) quedó pagado este mes.`;
+    return conCuentas(`✓ <b>${esc(fijo.concepto)}</b> (${pesos(fijo.monto)}) quedó pagado este mes.`, (c) => `pf:${fijo.id}:${c.id}`);
   }
   if (d) {
     const deuda = d.item;
     const falta = deuda.faltaMes;
     if (falta <= 0) return `La cuota de <b>${esc(deuda.nombre)}</b> ya estaba pagada este mes.`;
     const nueva = await db.abonarDeudaPorId(deuda.id, falta);
-    return `✓ Cuota de <b>${esc(deuda.nombre)}</b> pagada (${pesos(falta)}). Saldo nuevo: <b>${pesos(nueva?.saldo ?? 0)}</b>`;
+    if (!nueva) return `No encontré la deuda "${esc(nombre)}".`;
+    return conCuentas(`✓ Cuota de <b>${esc(deuda.nombre)}</b> pagada (${pesos(falta)}). Saldo nuevo: <b>${pesos(nueva.saldo)}</b>`, (c) => `pa:${nueva.abonoId}:${c.id}`);
   }
   return `No encontré un gasto fijo ni una deuda que se llame "${esc(nombre)}". Mira /pendientes.`;
 }
@@ -1098,7 +1164,7 @@ async function textoPrestamos(): Promise<string> {
 }
 
 /** Marca como pagada la cuota de un crédito (o un gasto fijo) sin tocar ningún saldo. */
-async function yaPague(args: string): Promise<string> {
+async function yaPague(args: string): Promise<Respuesta> {
   const busqueda = args.replace(/^(la\s+|el\s+)?(cuota\s+)?(de\s+)?(la\s+|el\s+)?(tarjeta\s+)?/i, '').trim();
   if (!busqueda) return 'Dime cuál: <code>ya pagué la cuota de la nu</code> o <code>ya pagué el gimnasio</code>.';
   const [ds, fs] = await Promise.all([db.deudas(), db.fijos()]);
@@ -1109,7 +1175,7 @@ async function yaPague(args: string): Promise<string> {
     await db.marcarCuota(credito.id, true);
     return `✓ Marqué la cuota de <b>${esc(credito.nombre)}</b> como pagada este mes. El saldo (${pesos(credito.saldo)}) no cambió.\nSi además quieres registrar el pago y bajar la deuda: <code>pagué la cuota de la ${esc(credito.nombre.toLowerCase())}</code>`;
   }
-  if (fijo) return marcarPagado(fijo.item.concepto);
+  if (fijo) return marcarPagado(fijo.item.concepto, false);
   return `No encontré "${esc(busqueda)}" entre tus créditos ni tus gastos fijos. Mira /pendientes.`;
 }
 

@@ -6,7 +6,7 @@ import {
   ArrowLeftRight, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardList, Download, Flame, LayoutDashboard, WalletCards,
   ChartPie, ChartSpline, HandCoins, Heart, Lightbulb, ListChecks, LogOut, Pencil, Trash2, Minus, PartyPopper, Plus, Repeat, Search, SearchX, Send, Sparkles, TrendingDown, TrendingUp, TriangleAlert,
 } from 'lucide-react';
-import { borrar, marcarFijo } from '@/app/actions';
+import { borrar } from '@/app/actions';
 import { comercioDe } from '@/lib/comercios';
 import type { Consejo, Nivel } from '@/lib/consejos';
 import type {
@@ -691,8 +691,6 @@ function Consejos({ consejos }: { consejos: Consejo[] }) {
 function Pendientes({ r, deudas, mes, abrir, avisar, ir }: {
   r: TResumen; deudas: Deuda[]; mes: string; abrir: (e: Editor) => void; avisar: (m: string) => void; ir: (t: Tab) => void;
 }) {
-  const [pendiente, iniciar] = useTransition();
-  const [hecho, setHecho] = useState<string | null>(null);
   if (!r.pendientes.length) {
     return <Vacio icono={r.cuotas + r.fijos > 0 ? 'listo' : 'lista'}>{r.cuotas + r.fijos > 0 ? '¡Al día! Ya pagaste todas las cuotas y fijos de este mes 🎉' : <>Agrega tus <button className="enlace" onClick={() => ir('plan')}>gastos fijos</button> y <button className="enlace" onClick={() => ir('billetera')}>créditos</button> para saber qué te falta pagar.</>}</Vacio>;
   }
@@ -702,22 +700,15 @@ function Pendientes({ r, deudas, mes, abrir, avisar, ir }: {
       if (d) abrir({ tipo: 'abono', item: d });
       return;
     }
-    setHecho(`${p.tipo}-${p.id}`);
-    iniciar(async () => {
-      await marcarFijo(p.id, true, mes);
-      avisar(`${p.nombre} pagado`);
-    });
+    abrir({ tipo: 'pagoFijo', item: { id: p.id, nombre: p.nombre, monto: p.monto }, mes });
   }
   return (
     <ul className="libro">
       {r.pendientes.map((p) => {
         const clave = `${p.tipo}-${p.id}`;
-        const marcando = pendiente && hecho === clave;
         return (
           <li key={clave} className="fila">
-            <button className="check" onClick={() => pagar(p)} disabled={marcando} aria-label={p.tipo === 'cuota' ? `Registrar pago de la cuota de ${p.nombre}` : `Marcar ${p.nombre} como pagado`}>
-              {marcando ? <Check size={16} aria-hidden /> : null}
-            </button>
+            <button className="check" onClick={() => pagar(p)} aria-label={p.tipo === 'cuota' ? `Registrar pago de la cuota de ${p.nombre}` : `Pagar ${p.nombre}`} />
             <span className="fila-txt">
               <span className="fila-nombre">{p.nombre}</span>
               <span className="fila-sub">

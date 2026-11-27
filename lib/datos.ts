@@ -150,7 +150,10 @@ export async function actualizarGasto(id: number, g: { concepto: string; monto: 
 
 export async function borrarGasto(id: number) {
   const [antes] = await sql()`DELETE FROM gastos WHERE id = ${id} RETURNING monto, cuenta_id`;
-  if (antes) await moverCuenta(nulo(antes.cuenta_id), n(antes.monto));
+  if (!antes) return;
+  await moverCuenta(nulo(antes.cuenta_id), n(antes.monto));
+  // Si era una cuenta dividida, también se deshacen las partes que te debían (la plata vuelve completa)
+  for (const p of await sql()`SELECT id FROM prestamos WHERE gasto_id = ${id}`) await borrarPrestamo(n(p.id));
 }
 
 const filaGasto = (r: Record<string, unknown>): Gasto => ({
@@ -442,9 +445,9 @@ export async function abonarDeudaPorId(id: number, monto: number, cuentaId?: num
     UPDATE deudas SET saldo = GREATEST(saldo - ${monto}, 0) WHERE id = ${id}
     RETURNING id, nombre, saldo, cuota`;
   if (!rows[0]) return null;
-  await sql()`INSERT INTO abonos (deuda_id, monto, cuenta_id, tipo) VALUES (${id}, ${monto}, ${cuentaId ?? null}, ${tipo})`;
+  const [ab] = await sql()`INSERT INTO abonos (deuda_id, monto, cuenta_id, tipo) VALUES (${id}, ${monto}, ${cuentaId ?? null}, ${tipo}) RETURNING id`;
   await moverCuenta(cuentaId, -monto);
-  return { id: n(rows[0].id), nombre: String(rows[0].nombre), saldo: n(rows[0].saldo), cuota: n(rows[0].cuota) };
+  return { id: n(rows[0].id), nombre: String(rows[0].nombre), saldo: n(rows[0].saldo), cuota: n(rows[0].cuota), abonoId: n(ab.id) };
 }
 
 // ---------- Cuentas (débito y billeteras) ----------
@@ -513,6 +516,8 @@ export async function movimientosCuenta(id: number, limite = 40): Promise<{
          FROM transferencias t LEFT JOIN cuentas c ON c.id = t.desde_id WHERE t.hacia_id = $1
        UNION ALL SELECT a.fecha, 'pago', 'Pago a ' || d.nombre, -a.monto, NULL, NULL
          FROM abonos a JOIN deudas d ON d.id = a.deuda_id WHERE a.cuenta_id = $1
+       UNION ALL SELECT pf.fecha, 'pago', f.concepto || ' (gasto fijo)', -pf.monto, NULL, NULL
+         FROM pagos_fijos pf JOIN fijos f ON f.id = pf.fijo_id WHERE pf.cuenta_id = $1 AND pf.monto IS NOT NULL
        UNION ALL SELECT fecha, 'sale', 'Préstamo a ' || persona, -monto, NULL, NULL FROM prestamos WHERE cuenta_id = $1
        UNION ALL SELECT pp.fecha, 'entra', p.persona || ' te devolvió', pp.monto, NULL, NULL
          FROM pagos_prestamo pp JOIN prestamos p ON p.id = pp.prestamo_id WHERE pp.cuenta_id = $1
@@ -602,10 +607,43 @@ export async function marcarCuota(id: number, pagada: boolean, mes = mesClave())
   else await sql()`DELETE FROM cuotas_marcadas WHERE deuda_id = ${id} AND mes = ${m}`;
 }
 
-export async function marcarFijo(id: number, pagado: boolean, mes = mesClave()) {
+/**
+ * Marca (o desmarca) un gasto fijo como pagado este mes. Si dices de qué cuenta salió, se descuenta de esa
+ * cuenta; al desmarcarlo, la plata vuelve. Devuelve false si ya estaba marcado.
+ */
+export async function marcarFijo(id: number, pagado: boolean, mes = mesClave(), cuentaId: number | null = null): Promise<boolean> {
   const m = mesValido(mes);
-  if (pagado) await sql()`INSERT INTO pagos_fijos (fijo_id, mes) VALUES (${id}, ${m}) ON CONFLICT DO NOTHING`;
-  else await sql()`DELETE FROM pagos_fijos WHERE fijo_id = ${id} AND mes = ${m}`;
+  if (pagado) {
+    const [f] = await sql()`SELECT monto FROM fijos WHERE id = ${id}`;
+    if (!f) return false;
+    const r = await sql()`
+      INSERT INTO pagos_fijos (fijo_id, mes, cuenta_id, monto) VALUES (${id}, ${m}, ${cuentaId}, ${n(f.monto)})
+      ON CONFLICT DO NOTHING RETURNING fijo_id`;
+    if (!r[0]) return false;
+    await moverCuenta(cuentaId, -n(f.monto));
+    return true;
+  }
+  const [p] = await sql()`DELETE FROM pagos_fijos WHERE fijo_id = ${id} AND mes = ${m} RETURNING cuenta_id, monto`;
+  if (p) await moverCuenta(nulo(p.cuenta_id), n(p.monto));
+  return Boolean(p);
+}
+
+/** Le pone cuenta al pago de un fijo que se marcó sin ella (botón del bot). Solo descuenta una vez. */
+export async function cuentaPagoFijo(id: number, cuentaId: number, mes = mesClave()) {
+  const [p] = await sql()`
+    UPDATE pagos_fijos SET cuenta_id = ${cuentaId}
+    WHERE fijo_id = ${id} AND mes = ${mesValido(mes)} AND cuenta_id IS NULL RETURNING monto`;
+  if (!p) return false;
+  await moverCuenta(cuentaId, -n(p.monto));
+  return true;
+}
+
+/** Le pone cuenta a un pago de crédito que se registró sin ella (botón del bot). */
+export async function cuentaAbono(abonoId: number, cuentaId: number) {
+  const [a] = await sql()`UPDATE abonos SET cuenta_id = ${cuentaId} WHERE id = ${abonoId} AND cuenta_id IS NULL RETURNING monto`;
+  if (!a) return false;
+  await moverCuenta(cuentaId, -n(a.monto));
+  return true;
 }
 
 // ---------- Presupuestos (tope por categoría) ----------
@@ -870,6 +908,48 @@ export async function convertirEnPrestamo(gastoId: number, persona: string): Pro
     INSERT INTO prestamos (persona, monto, pendiente, cuenta_id, nota)
     VALUES (${persona.slice(0, 60)}, ${n(g.monto)}, ${n(g.monto)}, ${nulo(g.cuenta_id)}, ${String(g.concepto)}) RETURNING id`;
   return n(r.id);
+}
+
+export type Division = { personas: number; parte: number; teDeben: number; deudores: { persona: string; monto: number }[] };
+
+/** Si el gasto ya se dividió: entre cuántos y cuánto te deben por él. */
+export async function divisionDeGasto(gastoId: number): Promise<Division | null> {
+  const rows = await sql()`SELECT persona, monto, nota FROM prestamos WHERE gasto_id = ${gastoId} ORDER BY id`;
+  if (!rows.length) return null;
+  const [g] = await sql()`SELECT monto FROM gastos WHERE id = ${gastoId}`;
+  const personas = Number(String(rows[0].nota ?? '').match(/entre (\d+)/)?.[1]) || rows.length + 1;
+  return {
+    personas, parte: n(g?.monto), teDeben: rows.reduce((s, r) => s + n(r.monto), 0),
+    deudores: rows.map((r) => ({ persona: String(r.persona), monto: n(r.monto) })),
+  };
+}
+
+/**
+ * Dividir la cuenta ("la vaca"): pagaste todo, pero tu parte es solo una. El gasto queda en tu parte y
+ * lo de los demás queda en "Te deben" (sin mover la plata otra vez: ya salió toda de tu cuenta).
+ * Con nombres, un préstamo por persona; sin nombres, uno solo por el resto.
+ */
+export async function dividirGasto(gastoId: number, personas: number, nombres: string[] = []): Promise<Division | null> {
+  if (!Number.isInteger(personas) || personas < 2 || personas > 30) return null;
+  if (await divisionDeGasto(gastoId)) return null; // ya estaba dividido
+  const [g] = await sql()`SELECT concepto, monto, cuenta_id FROM gastos WHERE id = ${gastoId}`;
+  if (!g || n(g.monto) < personas) return null;
+  const total = n(g.monto);
+  const concepto = String(g.concepto);
+  const cada = Math.floor(total / personas);
+  const parte = total - cada * (personas - 1);
+  const otros = personas - 1;
+  const deudores = nombres.length === otros
+    ? nombres.map((p) => ({ persona: p, monto: cada }))
+    : [{ persona: `${concepto} (${otros} ${otros === 1 ? 'persona' : 'personas'})`, monto: cada * otros }];
+  const nota = `Cuenta dividida entre ${personas}: ${concepto} de ${total}`;
+  await sql()`UPDATE gastos SET monto = ${parte} WHERE id = ${gastoId}`;
+  for (const d of deudores) {
+    await sql()`
+      INSERT INTO prestamos (persona, monto, pendiente, cuenta_id, nota, gasto_id)
+      VALUES (${d.persona.slice(0, 60)}, ${d.monto}, ${d.monto}, ${nulo(g.cuenta_id)}, ${nota}, ${gastoId})`;
+  }
+  return { personas, parte, teDeben: total - parte, deudores };
 }
 
 /** "Envío a juan" / "Presté abuelo mi novia" → "Juan" / "Abuelo mi novia": la persona a partir del concepto de un gasto. */

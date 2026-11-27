@@ -6,7 +6,7 @@ import { Banknote, X } from 'lucide-react';
 import {
   aportarMeta, borrar, marcarCuota, guardarAjuste, guardarCuenta, guardarDeuda, guardarFijo, guardarGasto, guardarIngreso, guardarMeta, guardarTopes,
   movimientosDeCuenta, registrarAbono, registrarCompra, transferir,
-  cobrarPrestamoAccion, convertirGastoAccion, crearPrestamoAccion,
+  cobrarPrestamoAccion, convertirGastoAccion, crearPrestamoAccion, dividirGastoAccion, pagarFijoAccion,
 } from '@/app/actions';
 import { ACABADOS, BANCOS, FRANQUICIAS, bancoPorId, estiloTarjeta } from '@/lib/bancos';
 import type { Cuenta, Deuda, Fijo, Gasto, Ingreso, Meta, Prestamo, Resumen, TipoCredito, Transferencia } from '@/lib/datos';
@@ -30,7 +30,8 @@ export type Editor =
   | { tipo: 'transferir'; modo?: 'transferir' | 'retiro' | 'consignacion'; desde?: number }
   | { tipo: 'verTransferencia'; item: Transferencia; de: string; a: string }
   | { tipo: 'prestamo' }
-  | { tipo: 'cobro'; item: Prestamo };
+  | { tipo: 'cobro'; item: Prestamo }
+  | { tipo: 'pagoFijo'; item: { id: number; nombre: string; monto: number }; mes: string };
 
 type Modo = 'gasto' | 'ingreso' | 'ajuste';
 
@@ -70,10 +71,11 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
     verTransferencia: 'Movimiento entre cuentas',
     prestamo: 'Prestar plata',
     cobro: editor.tipo === 'cobro' ? `${editor.item.persona} te devuelve` : 'Te devuelven',
+    pagoFijo: editor.tipo === 'pagoFijo' ? `Pagar ${editor.item.nombre}` : 'Pagar',
   }[tipo];
 
   const accion = { gasto: guardarGasto, ingreso: guardarIngreso, deuda: guardarDeuda, fijo: guardarFijo, abono: registrarAbono, ajuste: guardarAjuste, compra: registrarCompra, cuenta: guardarCuenta,
-    topes: guardarTopes, meta: guardarMeta, aporte: aportarMeta, transferir, verTransferencia: async () => {}, prestamo: crearPrestamoAccion, cobro: cobrarPrestamoAccion }[tipo];
+    topes: guardarTopes, meta: guardarMeta, aporte: aportarMeta, transferir, verTransferencia: async () => {}, prestamo: crearPrestamoAccion, cobro: cobrarPrestamoAccion, pagoFijo: pagarFijoAccion }[tipo];
   const mensaje = {
     gasto: esEdicion ? 'Gasto actualizado' : 'Gasto registrado',
     ingreso: esEdicion ? 'Ingreso actualizado' : 'Ingreso registrado',
@@ -90,6 +92,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
     verTransferencia: '',
     prestamo: 'Préstamo anotado: queda en Te deben',
     cobro: 'Pago registrado',
+    pagoFijo: editor.tipo === 'pagoFijo' ? `${editor.item.nombre} pagado` : 'Pagado',
   }[tipo];
 
   /** Al elegir el banco, pone su nombre si el campo está vacío o tenía otro banco. */
@@ -187,6 +190,20 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
           </>
         )}
 
+        {editor.tipo === 'pagoFijo' && (
+          <>
+            <input type="hidden" name="mes" value={editor.mes} />
+            <p className="nota">Gasto fijo de <b className="num">{pesos(editor.item.monto)}</b> este mes.</p>
+            <SelectorCuenta
+              cuentas={cuentas}
+              etiqueta="¿De dónde salió?"
+              defecto={cuentas.find((c) => c.principal)?.id ?? null}
+              vacia="No descontar"
+            />
+            <p className="nota">Se descuenta de esa cuenta y aparece en su historial. Si lo desmarcas, la plata vuelve. Elige <b>No descontar</b> si ya bajaste el saldo a mano.</p>
+          </>
+        )}
+
         {tipo === 'cobro' && editor.tipo === 'cobro' && (
           <>
             <input type="hidden" name="id" value={editor.item.id} />
@@ -212,6 +229,18 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
               }}>
                 Es un préstamo (me lo van a devolver)
               </button>
+            )}
+            {item?.id && item.categoria !== 'Ajuste' && item.monto >= 4_000 && (
+              <div className="dividir" role="group" aria-label="Dividir la cuenta">
+                <span>Dividir la cuenta entre</span>
+                {[2, 3, 4, 5, 6].map((k) => (
+                  <button type="button" key={k} className="chip" onClick={async () => {
+                    const r = await dividirGastoAccion(item.id, k);
+                    avisar(r ? `Tu parte: ${pesos(r.parte)} · te deben ${pesos(r.teDeben)}` : 'Esa cuenta ya estaba dividida');
+                    ref.current?.close();
+                  }}>{k}</button>
+                ))}
+              </div>
             )}
             <SelectorCuenta cuentas={cuentas} etiqueta="¿Con qué pagaste?" defecto={item ? item.cuentaId ?? null : cuentas.find((c) => c.principal)?.id ?? null} />
             {item?.categoria === 'Ajuste' ? (
@@ -387,7 +416,7 @@ export function Modal({ editor, cuentas, metas, r, cerrar, avisar }: {
 
         <div className="modal-acciones">
           <button type="button" className="btn" onClick={() => ref.current?.close()}>Cancelar</button>
-          {tipo !== 'verTransferencia' && <Guardar texto={tipo === 'abono' ? 'Registrar pago' : tipo === 'aporte' ? 'Guardar' : 'Guardar'} />}
+          {tipo !== 'verTransferencia' && <Guardar texto={tipo === 'abono' ? 'Registrar pago' : tipo === 'pagoFijo' ? 'Marcar pagado' : tipo === 'aporte' ? 'Guardar' : 'Guardar'} />}
         </div>
         {esEdicion && (
           <button type="button" className={confirmar ? 'btn peligro lleno' : 'btn peligro'} onClick={eliminar} disabled={borrando}>
@@ -509,7 +538,7 @@ function EditorPlastico({ clase, item }: { clase: 'credito' | 'debito'; item?: P
  * Elegir la cuenta. Con `obligatorio` (registros nuevos) no existe "Sin especificar" si ya tienes cuentas:
  * así no queda plata sin cuenta (un ingreso sin cuenta no le suma a ningún saldo).
  */
-function SelectorCuenta({ cuentas, etiqueta, defecto, obligatorio }: { cuentas: Cuenta[]; etiqueta: string; defecto: number | null; obligatorio?: boolean }) {
+function SelectorCuenta({ cuentas, etiqueta, defecto, obligatorio, vacia = 'Sin especificar' }: { cuentas: Cuenta[]; etiqueta: string; defecto: number | null; obligatorio?: boolean; vacia?: string }) {
   const tieneEfectivo = cuentas.some((c) => c.banco === 'efectivo');
   const [valor, setValor] = useState<string>(defecto ? String(defecto) : '');
   const sinVacia = obligatorio && cuentas.length > 0;
@@ -519,7 +548,7 @@ function SelectorCuenta({ cuentas, etiqueta, defecto, obligatorio }: { cuentas: 
       <input type="hidden" name="cuenta" value={valor} />
       {!sinVacia && (
         <button type="button" className={valor === '' ? 'cuenta-op on' : 'cuenta-op'} aria-pressed={valor === ''} onClick={() => setValor('')}>
-          Sin especificar
+          {vacia}
         </button>
       )}
       {cuentas.map((c) => (

@@ -42,6 +42,11 @@ const SENTENCIAS = [
     fijo_id INTEGER NOT NULL REFERENCES fijos(id) ON DELETE CASCADE, mes TEXT NOT NULL,
     fecha TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (fijo_id, mes))`,
   `CREATE TABLE IF NOT EXISTS palabras (palabra TEXT PRIMARY KEY, categoria TEXT NOT NULL)`,
+  // Pagar un fijo puede descontarlo de una cuenta (y se devuelve si lo desmarcas)
+  `ALTER TABLE pagos_fijos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
+  `ALTER TABLE pagos_fijos ADD COLUMN IF NOT EXISTS monto INTEGER`,
+  // Cuenta dividida ("la vaca"): los préstamos que salen de un gasto
+  `ALTER TABLE prestamos ADD COLUMN IF NOT EXISTS gasto_id INTEGER`,
   // De qué cuenta sale o entra cada movimiento
   `ALTER TABLE gastos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,
   `ALTER TABLE ingresos ADD COLUMN IF NOT EXISTS cuenta_id INTEGER REFERENCES cuentas(id) ON DELETE SET NULL`,

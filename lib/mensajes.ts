@@ -19,7 +19,7 @@ export function barra(ratio: number, largo = 10): string {
 }
 
 const elegir = <T,>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)];
-const filas = <T,>(xs: T[], n: number): T[][] => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+export const filas = <T,>(xs: T[], n: number): T[][] => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 /** Línea de "Hoy" con barra: cuánto llevas contra el límite del día. */
 export function lineasHoy(r: db.Resumen): string[] {
@@ -70,11 +70,11 @@ function lineaCuenta(tipo: 'gasto' | 'ingreso', c: db.Cuenta | undefined): strin
   return `${tipo === 'gasto' ? 'De' : 'A'} <b>${esc(c.nombre)}</b> · queda ${pesos(c.saldo)}${aviso}`;
 }
 
-type Abierto = 'categoria' | 'cuenta' | null;
+type Abierto = 'categoria' | 'cuenta' | 'dividir' | null;
 
 /** La tarjeta de un gasto con sus botones. `extra`: líneas que solo van la primera vez (retos, avisos). */
 export async function tarjetaGasto(id: number, o: { extra?: string[]; abierto?: Abierto; usoIA?: boolean } = {}): Promise<Tarjeta | null> {
-  const [g, cuentas, propias, r] = await Promise.all([db.gastoPorId(id), db.cuentas(), db.categoriasPropias(), db.resumen()]);
+  const [g, cuentas, propias, r, division] = await Promise.all([db.gastoPorId(id), db.cuentas(), db.categoriasPropias(), db.resumen(), db.divisionDeGasto(id)]);
   if (!g) return null;
   const duda = await db.dudaMonto('gasto', id);
   const cuenta = cuentas.find((c) => c.id === g.cuentaId);
@@ -82,9 +82,12 @@ export async function tarjetaGasto(id: number, o: { extra?: string[]; abierto?: 
   const lineas = [
     `✅ <b>${esc(g.concepto)}</b> · ${pesos(g.monto)}${o.usoIA ? ' <i>(con IA)</i>' : ''}`,
     `${esc(conEmoji(g.categoria, propias))} · ${lineaCuenta('gasto', cuenta)}`,
-    '',
-    ...lineasHoy(r),
   ];
+  if (division) {
+    const quienes = division.deudores.length > 1 ? division.deudores.map((d) => esc(d.persona)).join(', ') : `los otros ${division.personas - 1}`;
+    lineas.push(`Cuenta dividida entre ${division.personas}: tu parte es ${pesos(g.monto)}. Te deben <b>${pesos(division.teDeben)}</b> (${quienes}).`);
+  }
+  lineas.push('', ...lineasHoy(r));
   const tope = lineaTope(r, g.categoria);
   if (tope) lineas.push(tope);
   const f = await frase(r, g);
@@ -96,6 +99,12 @@ export async function tarjetaGasto(id: number, o: { extra?: string[]; abierto?: 
     lineas.push('', '<b>¿En qué categoría va?</b>', `<i>Para una nueva: /categoria Mascotas 🐶</i>`);
     const todas = [...CATEGORIAS.filter((c) => c !== 'Otros'), ...propias.map((p) => p.nombre), 'Otros'];
     botones.push(...filas(todas.map((c) => ({ texto: conEmoji(c, propias), dato: `k:${id}:${c}` })), 3));
+    botones.push([{ texto: 'Volver', dato: `v:g:${id}` }]);
+    return { texto: lineas.join('\n'), botones };
+  }
+  if (o.abierto === 'dividir') {
+    lineas.push('', '<b>¿Entre cuántas personas, contándote a ti?</b>', '<i>Tu parte queda como gasto y lo de los demás en Te deben. Con nombres: <code>cena 120 mil dividido entre juan, ana y yo</code></i>');
+    botones.push([2, 3, 4, 5, 6].map((k) => ({ texto: String(k), dato: `dv:${id}:${k}` })));
     botones.push([{ texto: 'Volver', dato: `v:g:${id}` }]);
     return { texto: lineas.join('\n'), botones };
   }
@@ -120,6 +129,10 @@ export async function tarjetaGasto(id: number, o: { extra?: string[]; abierto?: 
   if (cuenta && cuentas.length >= 2) acciones.push({ texto: 'Cuenta', dato: `a:g:${id}` });
   acciones.push({ texto: 'Deshacer', dato: `d:g:${id}` });
   botones.push(acciones);
+  // Pagaste la cuenta de varios (almuerzo, salida, taxi, mercado): se puede dividir
+  if (!division && g.categoria !== 'Ajuste' && g.monto >= 4_000 && /^(Comida|Salidas|Transporte|Compras|Hogar|Servicios)$/.test(g.categoria)) {
+    botones.push([{ texto: 'Dividir la cuenta', dato: `dv:${id}` }]);
+  }
   // Plata que le diste a alguien: quizá te la van a devolver
   if (/env[ií]o a|prest|le di a|le mand|a mi (novia|novio|mam[aá]|pap[aá]|herman|amig|abuel|t[ií][oa]|prim)/i.test(g.concepto)) {
     botones.push([{ texto: 'Es préstamo (me lo devuelven)', dato: `ep:${id}` }]);

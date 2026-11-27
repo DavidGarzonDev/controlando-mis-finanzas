@@ -199,6 +199,8 @@ function Fijos({ fijos, mes, abrir, avisar }: { fijos: Fijo[]; mes: string; abri
 
   function alternar(f: Fijo) {
     const nuevo = !pagado(f);
+    // Al pagarlo se pregunta de qué cuenta salió; desmarcarlo devuelve la plata de una vez
+    if (nuevo) return abrir({ tipo: 'pagoFijo', item: { id: f.id, nombre: f.concepto, monto: f.monto }, mes });
     setOptimista((o) => ({ ...o, [f.id]: nuevo }));
     iniciar(async () => {
       try {

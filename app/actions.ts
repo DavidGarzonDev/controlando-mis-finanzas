@@ -211,6 +211,14 @@ export async function marcarFijo(id: number, pagado: boolean, mes?: string) {
   refrescar();
 }
 
+/** Pagar un gasto fijo desde la web: lo marca y lo descuenta de la cuenta elegida. */
+export async function pagarFijoAccion(fd: FormData) {
+  await listo();
+  const id = idDe(fd);
+  if (id) await db.marcarFijo(id, true, db.mesValido(texto(fd, 'mes')), await cuentaDe(fd));
+  refrescar();
+}
+
 export async function borrar(tipo: 'gasto' | 'ingreso' | 'deuda' | 'fijo' | 'cuenta' | 'meta' | 'transferencia' | 'prestamo', id: number) {
   await listo();
   if (tipo === 'gasto') await db.borrarGasto(id);
@@ -380,6 +388,13 @@ export async function cobrarPrestamoAccion(fd: FormData) {
   const monto = entero(fd, 'monto');
   if (id && monto > 0) await db.pagarPrestamo(id, monto, await cuentaDe(fd));
   refrescar();
+}
+/** Dividir la cuenta de un gasto entre varias personas (tu parte queda como gasto, el resto en Te deben). */
+export async function dividirGastoAccion(id: number, personas: number) {
+  await listo();
+  const r = await db.dividirGasto(Number(id), Number(personas));
+  refrescar();
+  return r;
 }
 /** Un gasto que en realidad era un préstamo. */
 export async function convertirGastoAccion(id: number) {

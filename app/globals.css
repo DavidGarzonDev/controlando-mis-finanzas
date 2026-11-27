@@ -2807,3 +2807,8 @@ a.entrar-btn { text-decoration: none; }
 .lateral-codigo:hover { color: rgb(226 232 250 / 0.8); text-decoration: underline; }
 .entrar-codigo { order: 10; text-align: center; margin-top: 14px; font-size: 0.76rem; }
 .entrar-codigo a { color: var(--e-tinta-2); }
+
+/* Dividir la cuenta (editor de gasto) */
+.dividir { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 6px; }
+.dividir > span { font-size: 0.84rem; color: var(--tinta-2, inherit); margin-right: 4px; }
+.dividir .chip { min-width: 40px; justify-content: center; }
