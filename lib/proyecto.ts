@@ -14,7 +14,7 @@ export const PROYECTO = {
     /** https://ko-fi.com/tuusuario — pagos con tarjeta desde cualquier país. */
     kofi: '',
     /** https://paypal.me/tuusuario */
-    paypal: '',
+    paypal: 'https://paypal.me/money1242',
     /** https://github.com/sponsors/tuusuario */
     githubSponsors: '',
     /** Binance Pay ID (un número; está en Binance → Perfil → Pay ID). Gratis y al instante entre usuarios de Binance. */

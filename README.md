@@ -16,7 +16,12 @@ El botón copia el proyecto a tu GitHub y lo despliega en tu Vercel. Igual sigue
 
 ## ❤️ Apoya el proyecto
 
-Pilas es gratis. Si te sirve, puedes invitarme un tinto: los enlaces están en la app (**Plan → Apoya Pilas**) y en el botón **Sponsor** del repositorio. Una ⭐ en GitHub también ayuda.
+Pilas es gratis. Si te sirve, puedes invitarme un tinto:
+
+- **Desde Colombia:** llave Bre-B `@jdg657` (desde cualquier banco o Nequi, sin costo)
+- **Desde cualquier país:** [PayPal](https://paypal.me/money1242)
+
+También están en la app (**Plan → Apoya Pilas**) y en el botón **Sponsor** del repositorio. Una ⭐ en GitHub también ayuda.
 
 ---
 
