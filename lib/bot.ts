@@ -14,6 +14,7 @@ import { esc, pesos, type Boton } from './telegram';
 /** Lo que responde el bot: texto, y a veces botones para tocar (ej. ¿de qué cuenta salió?). */
 export type Respuesta = string | { texto: string; botones: Boton[][]; menu?: boolean; semana?: boolean };
 import { bancoEnTexto, bancoPorId } from './bancos';
+import { montoEnDolares, trm, type Trm } from './trm';
 
 const AYUDA = `<b>Cómo usarme</b>
 Escríbeme el gasto como te salga:
@@ -24,6 +25,8 @@ Escríbeme el gasto como te salga:
 ¿Pagaste la cuenta de varios? Divídela y lo de los demás queda en <b>Te deben</b>:
 • <code>almuerzo 60 mil entre 3</code>
 • <code>cena 120 mil dividido entre juan, ana y yo</code> · <code>taxi 18 mil a medias con laura</code>
+
+¿Pagaste en dólares? <code>netflix 17 usd</code> · <code>amazon 40 dólares</code> (lo paso a pesos con la TRM del día)
 
 Y lo que te entra, venga de donde venga:
 • <code>me pagaron 1.100.000</code>
@@ -317,7 +320,16 @@ export function sacarDivision(texto: string): { resto: string; personas: number;
 
 async function registrar(textoCompleto: string): Promise<Respuesta> {
   const division = sacarDivision(textoCompleto);
-  const textoOriginal = division?.resto || textoCompleto;
+  let textoOriginal = division?.resto || textoCompleto;
+  // "netflix 17 usd": se pasa a pesos con la TRM del día
+  let enDolares: { usd: number; trm: Trm } | null = null;
+  const usd = montoEnDolares(textoOriginal);
+  if (usd) {
+    const t = await trm();
+    if (!t) return 'No pude consultar el precio del dólar ahora mismo. Escríbelo en pesos, por ejemplo <code>netflix 70 mil</code>.';
+    enDolares = { usd: usd.usd, trm: t };
+    textoOriginal = `${usd.resto} ${Math.round(usd.usd * t.valor)}`;
+  }
   // "almuerzo 15 mil con nequi": la cuenta se quita del texto y el gasto sale de esa cuenta.
   // "en monedas" o "en billetes" también es efectivo.
   const esEfectivo = /\b(efectivo|cash|monedas?|billetes?)\b/i.test(textoOriginal);
@@ -378,6 +390,10 @@ async function registrar(textoCompleto: string): Promise<Respuesta> {
   if (otroMonto) await db.guardarDuda('gasto', idGasto, otroMonto);
   if (division && !otroMonto) await db.dividirGasto(idGasto, division.personas, division.nombres);
   const extra: string[] = [];
+  if (enDolares) {
+    const usdTxt = enDolares.usd.toLocaleString('es-CO', { maximumFractionDigits: 2 });
+    extra.push(`💵 USD ${usdTxt} × ${pesos(Math.round(enDolares.trm.valor))} (TRM${enDolares.trm.fecha ? ` del ${enDolares.trm.fecha.split('-').reverse().join('/')}` : ''}). Si el banco te cobró otro valor, corrígelo en la app.`);
+  }
   const nuevo = await db.gastoPorId(idGasto);
   if (nuevo) extra.push(...(await alertasGasto(nuevo)));
   if (cuenta?.c.banco === 'efectivo' && cuenta.c.saldo === 0) {
