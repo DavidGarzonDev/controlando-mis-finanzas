@@ -39,6 +39,20 @@ export async function mensajeDelDia(): Promise<string | null> {
     if (lineas.length > 1) bloques.push(lineas.join('\n'));
   }
 
+  // 1b) Día de pago: también es buen día para cobrar lo que te deben (préstamos de hace más de una semana)
+  if (esDiaDePago) {
+    const viejos = (await db.prestamos(true)).filter((p) => Date.now() - new Date(p.fecha).getTime() > 7 * 86_400_000);
+    if (viejos.length) {
+      const total = viejos.reduce((s, p) => s + p.pendiente, 0);
+      const semanas = (f: string) => Math.max(1, Math.round((Date.now() - new Date(f).getTime()) / (7 * 86_400_000)));
+      bloques.push(
+        `🤝 <b>Te deben ${pesos(total)}</b>. Hoy es buen día para cobrar:\n` +
+          viejos.slice(0, 6).map((p) => `• ${esc(p.persona)} ${pesos(p.pendiente)} (hace ${semanas(p.fecha)} ${semanas(p.fecha) === 1 ? 'semana' : 'semanas'})`).join('\n') +
+          `\nCuando te paguen: <code>me devolvió ${esc(viejos[0].persona.toLowerCase())} ${Math.round(viejos[0].pendiente / 1000)} mil</code>`,
+      );
+    }
+  }
+
   // 2) Pagos que vencen hoy o mañana
   const vencen: string[] = [];
   for (const f of fs) {
